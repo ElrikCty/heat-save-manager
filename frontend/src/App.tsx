@@ -1,28 +1,75 @@
-import {useState} from 'react';
-import logo from './assets/images/logo-universal.png';
+import {useEffect, useState} from 'react';
 import './App.css';
-import {Greet} from "../wailsjs/go/main/App";
+import {GetActiveProfile, GetPaths, ListProfiles, SwitchProfile} from '../wailsjs/go/main/App';
 
 function App() {
-    const [resultText, setResultText] = useState("Please enter your name below 👇");
-    const [name, setName] = useState('');
-    const updateName = (e: any) => setName(e.target.value);
-    const updateResultText = (result: string) => setResultText(result);
+    const [saveGamePath, setSaveGamePath] = useState('');
+    const [profiles, setProfiles] = useState<Array<{ name: string }>>([]);
+    const [activeProfile, setActiveProfile] = useState('');
+    const [status, setStatus] = useState('Loading profiles...');
+    const [isLoading, setIsLoading] = useState(true);
 
-    function greet() {
-        Greet(name).then(updateResultText);
+    async function loadData() {
+        try {
+            setIsLoading(true);
+            const [paths, profileItems] = await Promise.all([GetPaths(), ListProfiles()]);
+            setSaveGamePath(paths.saveGamePath);
+            setProfiles(profileItems);
+
+            try {
+                const active = await GetActiveProfile();
+                setActiveProfile(active);
+            } catch {
+                setActiveProfile('');
+            }
+
+            setStatus('Ready');
+        } catch (error) {
+            setStatus(`Failed to load profiles: ${String(error)}`);
+        } finally {
+            setIsLoading(false);
+        }
     }
+
+    async function onSwitch(profileName: string) {
+        try {
+            setStatus(`Switching to ${profileName}...`);
+            setIsLoading(true);
+            await SwitchProfile(profileName);
+            setActiveProfile(profileName);
+            setStatus(`Active profile: ${profileName}`);
+        } catch (error) {
+            setStatus(`Switch failed: ${String(error)}`);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        void loadData();
+    }, []);
 
     return (
         <div id="App">
-            <img src={logo} id="logo" alt="logo"/>
-            <div id="result" className="result">{resultText}</div>
+            <h1>Heat Save Manager</h1>
+            <p className="result">{status}</p>
+            <p className="result">SaveGame path: {saveGamePath || 'Not set'}</p>
+
             <div id="input" className="input-box">
-                <input id="name" className="input" onChange={updateName} autoComplete="off" name="input" type="text"/>
-                <button className="btn" onClick={greet}>Greet</button>
+                {profiles.length === 0 && <p>No profiles found in Profiles folder.</p>}
+                {profiles.map((profile) => (
+                    <button
+                        key={profile.name}
+                        className="btn"
+                        onClick={() => onSwitch(profile.name)}
+                        disabled={isLoading || profile.name === activeProfile}
+                    >
+                        {profile.name === activeProfile ? `${profile.name} (active)` : `Switch to ${profile.name}`}
+                    </button>
+                ))}
             </div>
         </div>
-    )
+    );
 }
 
-export default App
+export default App;
