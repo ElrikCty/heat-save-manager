@@ -58,12 +58,12 @@ func TestSaveCurrentProfileWritesIntoNamedProfile(t *testing.T) {
 	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "new-wrap")
 
 	svc := NewService(saveGamePath, profilesPath, marker.NewStore(saveGamePath), fsops.NewLocal())
-	if err := svc.SaveCurrentProfile("USA"); err != nil {
+	if err := svc.SaveCurrentProfile("ProfileAlpha"); err != nil {
 		t.Fatalf("save current profile: %v", err)
 	}
 
-	assertFileContent(t, filepath.Join(profilesPath, "USA", "savegame", "slot.sav"), "new-save")
-	assertFileContent(t, filepath.Join(profilesPath, "USA", "wraps", "wrap.txt"), "new-wrap")
+	assertFileContent(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame", "slot.sav"), "new-save")
+	assertFileContent(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps", "wrap.txt"), "new-wrap")
 }
 
 func TestSaveCurrentProfileUsesActiveMarkerNameWhenEmpty(t *testing.T) {
@@ -77,7 +77,7 @@ func TestSaveCurrentProfileUsesActiveMarkerNameWhenEmpty(t *testing.T) {
 	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "wrap")
 
 	store := marker.NewStore(saveGamePath)
-	if err := store.WriteActiveProfile("EU"); err != nil {
+	if err := store.WriteActiveProfile("ProfileBeta"); err != nil {
 		t.Fatalf("write marker: %v", err)
 	}
 
@@ -86,8 +86,8 @@ func TestSaveCurrentProfileUsesActiveMarkerNameWhenEmpty(t *testing.T) {
 		t.Fatalf("save with active marker: %v", err)
 	}
 
-	assertFileContent(t, filepath.Join(profilesPath, "EU", "savegame", "slot.sav"), "save")
-	assertFileContent(t, filepath.Join(profilesPath, "EU", "wraps", "wrap.txt"), "wrap")
+	assertFileContent(t, filepath.Join(profilesPath, "ProfileBeta", "savegame", "slot.sav"), "save")
+	assertFileContent(t, filepath.Join(profilesPath, "ProfileBeta", "wraps", "wrap.txt"), "wrap")
 }
 
 func TestSaveCurrentProfileRequiresRootFolders(t *testing.T) {
@@ -98,7 +98,7 @@ func TestSaveCurrentProfileRequiresRootFolders(t *testing.T) {
 	profilesPath := filepath.Join(saveGamePath, "Profiles")
 
 	svc := NewService(saveGamePath, profilesPath, marker.NewStore(saveGamePath), fsops.NewLocal())
-	err := svc.SaveCurrentProfile("JPN")
+	err := svc.SaveCurrentProfile("ProfileGamma")
 	if !errors.Is(err, ErrRootSavegameMissing) {
 		t.Fatalf("expected ErrRootSavegameMissing, got %v", err)
 	}
@@ -110,24 +110,24 @@ func TestRenameProfileRenamesFolderAndActiveMarker(t *testing.T) {
 	root := t.TempDir()
 	saveGamePath := filepath.Join(root, "SaveGame")
 	profilesPath := filepath.Join(saveGamePath, "Profiles")
-	createDirWithFile(t, filepath.Join(profilesPath, "USA", "savegame"), "slot.sav", "save")
-	createDirWithFile(t, filepath.Join(profilesPath, "USA", "wraps"), "wrap.txt", "wrap")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame"), "slot.sav", "save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps"), "wrap.txt", "wrap")
 
 	store := marker.NewStore(saveGamePath)
-	if err := store.WriteActiveProfile("USA"); err != nil {
+	if err := store.WriteActiveProfile("ProfileAlpha"); err != nil {
 		t.Fatalf("write marker: %v", err)
 	}
 
 	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
-	if err := svc.RenameProfile("USA", "NA"); err != nil {
+	if err := svc.RenameProfile("ProfileAlpha", "ProfileDelta"); err != nil {
 		t.Fatalf("rename profile: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(profilesPath, "USA")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(profilesPath, "ProfileAlpha")); !os.IsNotExist(err) {
 		t.Fatalf("expected old profile folder removed, got %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(profilesPath, "NA")); err != nil {
+	if _, err := os.Stat(filepath.Join(profilesPath, "ProfileDelta")); err != nil {
 		t.Fatalf("expected new profile folder exists, got %v", err)
 	}
 
@@ -136,8 +136,8 @@ func TestRenameProfileRenamesFolderAndActiveMarker(t *testing.T) {
 		t.Fatalf("read active marker: %v", err)
 	}
 
-	if active != "NA" {
-		t.Fatalf("expected active marker NA, got %q", active)
+	if active != "ProfileDelta" {
+		t.Fatalf("expected active marker ProfileDelta, got %q", active)
 	}
 }
 
@@ -147,16 +147,16 @@ func TestDeleteProfileBlocksActiveProfile(t *testing.T) {
 	root := t.TempDir()
 	saveGamePath := filepath.Join(root, "SaveGame")
 	profilesPath := filepath.Join(saveGamePath, "Profiles")
-	createDirWithFile(t, filepath.Join(profilesPath, "USA", "savegame"), "slot.sav", "save")
-	createDirWithFile(t, filepath.Join(profilesPath, "USA", "wraps"), "wrap.txt", "wrap")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame"), "slot.sav", "save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps"), "wrap.txt", "wrap")
 
 	store := marker.NewStore(saveGamePath)
-	if err := store.WriteActiveProfile("USA"); err != nil {
+	if err := store.WriteActiveProfile("ProfileAlpha"); err != nil {
 		t.Fatalf("write marker: %v", err)
 	}
 
 	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
-	err := svc.DeleteProfile("USA")
+	err := svc.DeleteProfile("ProfileAlpha")
 	if !errors.Is(err, ErrCannotDeleteActiveProfile) {
 		t.Fatalf("expected ErrCannotDeleteActiveProfile, got %v", err)
 	}
@@ -168,20 +168,20 @@ func TestDeleteProfileRemovesNonActiveProfile(t *testing.T) {
 	root := t.TempDir()
 	saveGamePath := filepath.Join(root, "SaveGame")
 	profilesPath := filepath.Join(saveGamePath, "Profiles")
-	createDirWithFile(t, filepath.Join(profilesPath, "EU", "savegame"), "slot.sav", "save")
-	createDirWithFile(t, filepath.Join(profilesPath, "EU", "wraps"), "wrap.txt", "wrap")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileBeta", "savegame"), "slot.sav", "save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileBeta", "wraps"), "wrap.txt", "wrap")
 
 	store := marker.NewStore(saveGamePath)
-	if err := store.WriteActiveProfile("USA"); err != nil {
+	if err := store.WriteActiveProfile("ProfileAlpha"); err != nil {
 		t.Fatalf("write marker: %v", err)
 	}
 
 	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
-	if err := svc.DeleteProfile("EU"); err != nil {
+	if err := svc.DeleteProfile("ProfileBeta"); err != nil {
 		t.Fatalf("delete profile: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(profilesPath, "EU")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(profilesPath, "ProfileBeta")); !os.IsNotExist(err) {
 		t.Fatalf("expected deleted profile not found, got %v", err)
 	}
 }
@@ -192,20 +192,20 @@ func TestRenameProfileRollsBackFolderWhenMarkerWriteFails(t *testing.T) {
 	root := t.TempDir()
 	saveGamePath := filepath.Join(root, "SaveGame")
 	profilesPath := filepath.Join(saveGamePath, "Profiles")
-	createDirWithFile(t, filepath.Join(profilesPath, "USA", "savegame"), "slot.sav", "save")
-	createDirWithFile(t, filepath.Join(profilesPath, "USA", "wraps"), "wrap.txt", "wrap")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame"), "slot.sav", "save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps"), "wrap.txt", "wrap")
 
 	svc := NewService(saveGamePath, profilesPath, failingRenameMarker{}, fsops.NewLocal())
-	err := svc.RenameProfile("USA", "NA")
+	err := svc.RenameProfile("ProfileAlpha", "ProfileDelta")
 	if err == nil {
 		t.Fatal("expected rename to fail when marker update fails")
 	}
 
-	if _, statErr := os.Stat(filepath.Join(profilesPath, "USA")); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(profilesPath, "ProfileAlpha")); statErr != nil {
 		t.Fatalf("expected original folder restored, got %v", statErr)
 	}
 
-	if _, statErr := os.Stat(filepath.Join(profilesPath, "NA")); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Join(profilesPath, "ProfileDelta")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected new folder rolled back, got %v", statErr)
 	}
 }
@@ -249,7 +249,7 @@ func assertFileContent(t *testing.T, path string, expected string) {
 type failingRenameMarker struct{}
 
 func (f failingRenameMarker) ReadActiveProfile() (string, error) {
-	return "USA", nil
+	return "ProfileAlpha", nil
 }
 
 func (f failingRenameMarker) WriteActiveProfile(profileName string) error {
