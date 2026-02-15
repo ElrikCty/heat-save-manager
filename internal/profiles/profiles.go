@@ -30,6 +30,10 @@ func (s *Service) List() ([]Profile, error) {
 		return nil, ErrProfilesPathRequired
 	}
 
+	if err := os.MkdirAll(s.profilesPath, 0o755); err != nil {
+		return nil, err
+	}
+
 	entries, err := os.ReadDir(s.profilesPath)
 	if err != nil {
 		return nil, err
