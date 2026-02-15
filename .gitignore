@@ -5,13 +5,13 @@ dist/
 *.test
 *.out
 
-# Node / frontend
+# Wails build artifacts
+build/bin/
+
+# Frontend dependencies and build output
 node_modules/
 frontend/node_modules/
-
-# Build artifacts
-build/
-wailsjs/
+frontend/dist/
 
 # IDE / OS
 .vscode/
