@@ -124,7 +124,7 @@ func (s *Service) Switch(params Params) (Result, error) {
 		return Result{ProfileName: profileName, RolledBack: true}, err
 	}
 
-	_ = s.ops.RemoveDir(backupRoot)
+	_ = s.cleanupBackupTree(backupRoot)
 
 	return Result{
 		ProfileName: profileName,
@@ -163,7 +163,7 @@ func (s *Service) rollback(targetSavegame string, targetWraps string, backupSave
 		return err
 	}
 
-	return s.ops.RemoveDir(filepath.Dir(backupSavegame))
+	return s.cleanupBackupTree(filepath.Dir(backupSavegame))
 }
 
 func (s *Service) restoreDir(target string, backup string, hadOriginal bool) error {
@@ -172,4 +172,28 @@ func (s *Service) restoreDir(target string, backup string, hadOriginal bool) err
 	}
 
 	return s.ops.RemoveDir(target)
+}
+
+func (s *Service) cleanupBackupTree(backupRoot string) error {
+	if err := s.ops.RemoveDir(backupRoot); err != nil {
+		return err
+	}
+
+	backupParent := filepath.Dir(backupRoot)
+	entries, err := os.ReadDir(backupParent)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+
+		return err
+	}
+
+	if len(entries) == 0 {
+		if err := s.ops.RemoveDir(backupParent); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

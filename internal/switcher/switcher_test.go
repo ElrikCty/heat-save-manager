@@ -9,6 +9,7 @@ import (
 
 	"heat-save-manager/internal/fsops"
 	"heat-save-manager/internal/marker"
+	"heat-save-manager/internal/profiles"
 )
 
 func TestSwitchReplacesRootAndUpdatesMarker(t *testing.T) {
@@ -51,6 +52,8 @@ func TestSwitchReplacesRootAndUpdatesMarker(t *testing.T) {
 	if active != profileName {
 		t.Fatalf("expected active profile %q, got %q", profileName, active)
 	}
+
+	assertBackupRootMissing(t, saveGamePath)
 }
 
 func TestSwitchRollsBackWhenMarkerWriteFails(t *testing.T) {
@@ -79,6 +82,7 @@ func TestSwitchRollsBackWhenMarkerWriteFails(t *testing.T) {
 
 	assertFileContent(t, filepath.Join(saveGamePath, "savegame", "slot.sav"), "old-save")
 	assertFileContent(t, filepath.Join(saveGamePath, "wraps", "wrap.txt"), "old-wrap")
+	assertBackupRootMissing(t, saveGamePath)
 }
 
 func TestSwitchRollsBackWhenSecondReplaceFails(t *testing.T) {
@@ -108,6 +112,59 @@ func TestSwitchRollsBackWhenSecondReplaceFails(t *testing.T) {
 
 	assertFileContent(t, filepath.Join(saveGamePath, "savegame", "slot.sav"), "old-save")
 	assertFileContent(t, filepath.Join(saveGamePath, "wraps", "wrap.txt"), "old-wrap")
+	assertBackupRootMissing(t, saveGamePath)
+}
+
+func TestSwitchRollsBackWhenOriginalDirsDidNotExist(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+	profileName := "LATAM"
+
+	createProfile(t, profilesPath, profileName, "new-save", "new-wrap")
+
+	service := NewService(saveGamePath, profilesPath, failingMarker{}, fsops.NewLocal())
+	service.now = func() time.Time { return time.Date(2026, 2, 15, 12, 3, 0, 0, time.UTC) }
+
+	result, err := service.Switch(Params{ProfileName: profileName})
+	if err == nil {
+		t.Fatal("expected switch to fail when marker update fails")
+	}
+
+	if !result.RolledBack {
+		t.Fatal("expected RolledBack=true")
+	}
+
+	_, saveErr := os.Stat(filepath.Join(saveGamePath, "savegame"))
+	if !os.IsNotExist(saveErr) {
+		t.Fatalf("expected savegame dir removed by rollback, got %v", saveErr)
+	}
+
+	_, wrapsErr := os.Stat(filepath.Join(saveGamePath, "wraps"))
+	if !os.IsNotExist(wrapsErr) {
+		t.Fatalf("expected wraps dir removed by rollback, got %v", wrapsErr)
+	}
+
+	assertBackupRootMissing(t, saveGamePath)
+}
+
+func TestSwitchFailsWhenProfileLayoutIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+	profileName := "BROKEN"
+
+	createDirWithFile(t, filepath.Join(profilesPath, profileName, "savegame"), "slot.sav", "partial")
+
+	service := NewService(saveGamePath, profilesPath, marker.NewStore(saveGamePath), fsops.NewLocal())
+	_, err := service.Switch(Params{ProfileName: profileName})
+	if !errors.Is(err, profiles.ErrInvalidProfileLayout) {
+		t.Fatalf("expected ErrInvalidProfileLayout, got %v", err)
+	}
 }
 
 func TestSwitchRequiresValidInputs(t *testing.T) {
@@ -181,5 +238,14 @@ func assertFileContent(t *testing.T, path string, expected string) {
 
 	if string(data) != expected {
 		t.Fatalf("expected %q, got %q", expected, string(data))
+	}
+}
+
+func assertBackupRootMissing(t *testing.T, saveGamePath string) {
+	t.Helper()
+
+	_, err := os.Stat(filepath.Join(saveGamePath, ".backup"))
+	if !os.IsNotExist(err) {
+		t.Fatalf("expected .backup root to be removed, got %v", err)
 	}
 }
