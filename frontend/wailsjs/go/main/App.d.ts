@@ -3,11 +3,19 @@
 import {main} from '../models';
 import {switcher} from '../models';
 
+export function DeleteProfile(arg1:string):Promise<void>;
+
 export function GetActiveProfile():Promise<string>;
 
 export function GetPaths():Promise<main.AppPaths>;
 
 export function ListProfiles():Promise<Array<main.ProfileItem>>;
+
+export function PrepareFreshProfile(arg1:string):Promise<void>;
+
+export function RenameProfile(arg1:string,arg2:string):Promise<void>;
+
+export function SaveCurrentProfile(arg1:string):Promise<void>;
 
 export function SetSaveGamePath(arg1:string):Promise<void>;
 

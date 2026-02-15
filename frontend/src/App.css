@@ -92,6 +92,21 @@
     transition: transform 120ms ease, opacity 120ms ease;
 }
 
+.action-btn {
+    border: none;
+    border-radius: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0.6rem 0.9rem;
+    color: #281b13;
+    background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+}
+
+.action-btn.secondary {
+    background: rgba(236, 242, 248, 0.18);
+    color: var(--text-main);
+}
+
 .refresh-btn {
     width: 100%;
     padding: 0.7rem;
@@ -114,6 +129,37 @@
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
+}
+
+.field-label {
+    display: block;
+    margin: 0.75rem 0 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.field-row {
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: 1fr auto;
+}
+
+.field-row input {
+    border: 1px solid rgba(162, 181, 200, 0.25);
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-main);
+}
+
+.field-row input::placeholder {
+    color: var(--text-muted);
+}
+
+.field-row input:disabled,
+.action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
 .profile-card {
@@ -149,6 +195,21 @@
     background: rgba(255, 255, 255, 0.08);
 }
 
+.switch-btn.secondary {
+    background: rgba(236, 242, 248, 0.15);
+}
+
+.switch-btn.danger {
+    background: rgba(255, 142, 142, 0.2);
+    color: #ffb1b1;
+}
+
+.profile-actions {
+    display: flex;
+    gap: 0.45rem;
+    align-items: center;
+}
+
 .profile-card.active .switch-btn {
     background: rgba(70, 201, 138, 0.2);
     color: var(--success);
@@ -180,7 +241,17 @@
         flex-direction: column;
     }
 
+    .profile-actions,
+    .field-row {
+        width: 100%;
+        grid-template-columns: 1fr;
+    }
+
     .switch-btn {
+        width: 100%;
+    }
+
+    .action-btn {
         width: 100%;
     }
 }
