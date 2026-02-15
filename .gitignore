@@ -1,0 +1,20 @@
+# Go
+bin/
+dist/
+*.exe
+*.test
+*.out
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+
+# Build artifacts
+build/
+wailsjs/
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
