@@ -9,6 +9,7 @@ import (
 
 	"heat-save-manager/internal/discovery"
 	"heat-save-manager/internal/fsops"
+	"heat-save-manager/internal/lifecycle"
 	"heat-save-manager/internal/marker"
 	"heat-save-manager/internal/profiles"
 	"heat-save-manager/internal/switcher"
@@ -93,13 +94,35 @@ func (a *App) ListProfiles() ([]ProfileItem, error) {
 }
 
 func (a *App) GetActiveProfile() (string, error) {
-	store := marker.NewStore(a.saveGamePath)
-	return store.ReadActiveProfile()
+	return a.newMarkerStore().ReadActiveProfile()
 }
 
 func (a *App) SwitchProfile(profileName string) (switcher.Result, error) {
-	store := marker.NewStore(a.saveGamePath)
-	service := switcher.NewService(a.saveGamePath, a.profilesPath, store, fsops.NewLocal())
+	service := switcher.NewService(a.saveGamePath, a.profilesPath, a.newMarkerStore(), fsops.NewLocal())
 
 	return service.Switch(switcher.Params{ProfileName: profileName})
+}
+
+func (a *App) PrepareFreshProfile(profileName string) error {
+	return a.newLifecycleService().PrepareFreshProfile(profileName)
+}
+
+func (a *App) SaveCurrentProfile(profileName string) error {
+	return a.newLifecycleService().SaveCurrentProfile(profileName)
+}
+
+func (a *App) RenameProfile(oldName string, newName string) error {
+	return a.newLifecycleService().RenameProfile(oldName, newName)
+}
+
+func (a *App) DeleteProfile(profileName string) error {
+	return a.newLifecycleService().DeleteProfile(profileName)
+}
+
+func (a *App) newLifecycleService() *lifecycle.Service {
+	return lifecycle.NewService(a.saveGamePath, a.profilesPath, a.newMarkerStore(), fsops.NewLocal())
+}
+
+func (a *App) newMarkerStore() *marker.Store {
+	return marker.NewStore(a.saveGamePath)
 }

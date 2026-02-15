@@ -36,9 +36,9 @@ func TestListReturnsOnlyValidProfilesSorted(t *testing.T) {
 
 	profilesPath := t.TempDir()
 
-	createProfileLayout(t, profilesPath, "USA", true)
-	createProfileLayout(t, profilesPath, "JPN", true)
-	createProfileLayout(t, profilesPath, "EU", false)
+	createProfileLayout(t, profilesPath, "Alpha", true)
+	createProfileLayout(t, profilesPath, "Beta", true)
+	createProfileLayout(t, profilesPath, "Broken", false)
 
 	svc := NewService(profilesPath)
 	items, err := svc.List()
@@ -50,8 +50,8 @@ func TestListReturnsOnlyValidProfilesSorted(t *testing.T) {
 		t.Fatalf("expected 2 valid profiles, got %d", len(items))
 	}
 
-	if items[0].Name != "JPN" || items[1].Name != "USA" {
-		t.Fatalf("expected sorted profiles [JPN USA], got [%s %s]", items[0].Name, items[1].Name)
+	if items[0].Name != "Alpha" || items[1].Name != "Beta" {
+		t.Fatalf("expected sorted profiles [Alpha Beta], got [%s %s]", items[0].Name, items[1].Name)
 	}
 }
 

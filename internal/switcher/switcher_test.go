@@ -18,7 +18,7 @@ func TestSwitchReplacesRootAndUpdatesMarker(t *testing.T) {
 	root := t.TempDir()
 	saveGamePath := filepath.Join(root, "SaveGame")
 	profilesPath := filepath.Join(saveGamePath, "Profiles")
-	profileName := "USA"
+	profileName := "ProfileAlpha"
 
 	createProfile(t, profilesPath, profileName, "new-save", "new-wrap")
 	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "old-save")
@@ -62,7 +62,7 @@ func TestSwitchRollsBackWhenMarkerWriteFails(t *testing.T) {
 	root := t.TempDir()
 	saveGamePath := filepath.Join(root, "SaveGame")
 	profilesPath := filepath.Join(saveGamePath, "Profiles")
-	profileName := "JPN"
+	profileName := "ProfileBeta"
 
 	createProfile(t, profilesPath, profileName, "new-save", "new-wrap")
 	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "old-save")
@@ -91,7 +91,7 @@ func TestSwitchRollsBackWhenSecondReplaceFails(t *testing.T) {
 	root := t.TempDir()
 	saveGamePath := filepath.Join(root, "SaveGame")
 	profilesPath := filepath.Join(saveGamePath, "Profiles")
-	profileName := "EU"
+	profileName := "ProfileGamma"
 
 	createProfile(t, profilesPath, profileName, "new-save", "new-wrap")
 	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "old-save")
@@ -121,7 +121,7 @@ func TestSwitchRollsBackWhenOriginalDirsDidNotExist(t *testing.T) {
 	root := t.TempDir()
 	saveGamePath := filepath.Join(root, "SaveGame")
 	profilesPath := filepath.Join(saveGamePath, "Profiles")
-	profileName := "LATAM"
+	profileName := "FreshProfile"
 
 	createProfile(t, profilesPath, profileName, "new-save", "new-wrap")
 
@@ -156,7 +156,7 @@ func TestSwitchFailsWhenProfileLayoutIsInvalid(t *testing.T) {
 	root := t.TempDir()
 	saveGamePath := filepath.Join(root, "SaveGame")
 	profilesPath := filepath.Join(saveGamePath, "Profiles")
-	profileName := "BROKEN"
+	profileName := "BrokenProfile"
 
 	createDirWithFile(t, filepath.Join(profilesPath, profileName, "savegame"), "slot.sav", "partial")
 

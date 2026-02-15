@@ -12,7 +12,7 @@ func TestWriteAndReadActiveProfile(t *testing.T) {
 	root := t.TempDir()
 	store := NewStore(root)
 
-	if err := store.WriteActiveProfile(" USA "); err != nil {
+	if err := store.WriteActiveProfile(" ProfileOne "); err != nil {
 		t.Fatalf("write active profile: %v", err)
 	}
 
@@ -21,8 +21,8 @@ func TestWriteAndReadActiveProfile(t *testing.T) {
 		t.Fatalf("read active profile: %v", err)
 	}
 
-	if got != "USA" {
-		t.Fatalf("expected profile USA, got %q", got)
+	if got != "ProfileOne" {
+		t.Fatalf("expected profile ProfileOne, got %q", got)
 	}
 }
 
