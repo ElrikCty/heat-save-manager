@@ -1,59 +1,186 @@
-#app {
-    height: 100vh;
+:root {
+    --surface: #18222f;
+    --surface-soft: #233345;
+    --surface-strong: #0f1822;
+    --text-main: #ecf2f8;
+    --text-muted: #a2b5c8;
+    --accent: #ff7a18;
+    --accent-soft: #ffa867;
+    --success: #46c98a;
+    --border: rgba(162, 181, 200, 0.2);
+}
+
+.app-shell {
+    min-height: 100vh;
+    box-sizing: border-box;
+    padding: 2rem 1rem 1.5rem;
+    color: var(--text-main);
+    background:
+        radial-gradient(circle at 0% 0%, rgba(255, 122, 24, 0.2), transparent 45%),
+        radial-gradient(circle at 100% 0%, rgba(70, 201, 138, 0.16), transparent 35%),
+        linear-gradient(145deg, #0b121b 0%, #101a26 65%, #111f2d 100%);
+}
+
+.hero {
     text-align: center;
+    margin-bottom: 1.5rem;
 }
 
-#logo {
-    display: block;
-    width: 50%;
-    height: 50%;
-    margin: auto;
-    padding: 10% 0 0;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
-    background-origin: content-box;
+.eyebrow {
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.12rem;
+    color: var(--accent-soft);
+    margin: 0;
 }
 
-.result {
-    height: 20px;
-    line-height: 20px;
-    margin: 1.5rem auto;
+.hero h1 {
+    margin: 0.25rem 0 0.5rem;
+    font-size: 2rem;
 }
 
-.input-box .btn {
-    width: 60px;
-    height: 30px;
-    line-height: 30px;
-    border-radius: 3px;
+.status {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+.status.ok {
+    color: var(--success);
+}
+
+.status.loading {
+    color: var(--accent-soft);
+}
+
+.status.danger {
+    color: #ff8e8e;
+}
+
+.dashboard {
+    max-width: 980px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.panel {
+    background: linear-gradient(160deg, var(--surface) 0%, var(--surface-soft) 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1rem;
+    box-shadow: 0 14px 35px rgba(0, 0, 0, 0.28);
+}
+
+.panel h2 {
+    margin: 0 0 0.65rem;
+    font-size: 1.05rem;
+}
+
+.path {
+    margin: 0 0 0.8rem;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.refresh-btn,
+.switch-btn {
     border: none;
-    margin: 0 0 0 20px;
-    padding: 0 8px;
+    border-radius: 10px;
+    font-weight: 700;
     cursor: pointer;
+    transition: transform 120ms ease, opacity 120ms ease;
 }
 
-.input-box .btn:hover {
-    background-image: linear-gradient(to top, #cfd9df 0%, #e2ebf0 100%);
-    color: #333333;
+.refresh-btn {
+    width: 100%;
+    padding: 0.7rem;
+    color: #281b13;
+    background: linear-gradient(135deg, var(--accent), var(--accent-soft));
 }
 
-.input-box .input {
-    border: none;
-    border-radius: 3px;
-    outline: none;
-    height: 30px;
-    line-height: 30px;
-    padding: 0 10px;
-    background-color: rgba(240, 240, 240, 1);
-    -webkit-font-smoothing: antialiased;
+.refresh-btn:disabled,
+.switch-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
-.input-box .input:hover {
-    border: none;
-    background-color: rgba(255, 255, 255, 1);
+.refresh-btn:not(:disabled):hover,
+.switch-btn:not(:disabled):hover {
+    transform: translateY(-1px);
 }
 
-.input-box .input:focus {
-    border: none;
-    background-color: rgba(255, 255, 255, 1);
+.profile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.profile-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.8rem;
+    border-radius: 12px;
+    border: 1px solid rgba(162, 181, 200, 0.22);
+    background: var(--surface-strong);
+}
+
+.profile-card.active {
+    border-color: rgba(70, 201, 138, 0.55);
+}
+
+.profile-card h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.profile-card p {
+    margin: 0.15rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.86rem;
+}
+
+.switch-btn {
+    min-width: 76px;
+    padding: 0.48rem 0.8rem;
+    color: #f1f7fc;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.profile-card.active .switch-btn {
+    background: rgba(70, 201, 138, 0.2);
+    color: var(--success);
+}
+
+.empty {
+    margin: 0.5rem 0 0;
+    color: var(--text-muted);
+}
+
+.footnote {
+    margin-top: 1.2rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+    .app-shell {
+        padding-top: 1.5rem;
+    }
+
+    .hero h1 {
+        font-size: 1.65rem;
+    }
+
+    .profile-card {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .switch-btn {
+        width: 100%;
+    }
 }
