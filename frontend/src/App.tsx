@@ -141,6 +141,7 @@ function App() {
     const [renameValue, setRenameValue] = useState('');
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
     const [markerQuickProfile, setMarkerQuickProfile] = useState('');
+    const [isBundleExpanded, setIsBundleExpanded] = useState(false);
 
     const isModalOpen = renameTarget !== null || deleteTarget !== null;
 
@@ -683,55 +684,75 @@ function App() {
                 </section>
 
                 <section className="panel bundle-panel">
-                    <h2>Bundle Transfer</h2>
-
-                    <label className="field-label" htmlFor="export-profile-input">Export profile bundle</label>
-                    <div className="field-row bundle-row">
-                        <input
-                            id="export-profile-input"
-                            value={exportProfileName}
-                            onChange={(event) => setExportProfileName(event.target.value)}
-                            placeholder="Profile name"
+                    <div className="bundle-header-row">
+                        <div>
+                            <h2>Advanced: Bundle Transfer</h2>
+                            <p className="field-hint">Use only when manually moving profiles between machines or backups.</p>
+                        </div>
+                        <button
+                            className="switch-btn secondary"
+                            onClick={() => setIsBundleExpanded((open) => !open)}
                             disabled={isLoading || isModalOpen}
-                        />
-                        <input
-                            id="export-bundle-path-input"
-                            value={exportBundlePath}
-                            onChange={(event) => setExportBundlePath(event.target.value)}
-                            placeholder="C:\\Path\\to\\profile.zip"
-                            disabled={isLoading || isModalOpen}
-                        />
-                        <button className="action-btn secondary" onClick={() => void onPickExportBundlePath()} disabled={isLoading || isModalOpen}>
-                            Browse...
+                            aria-expanded={isBundleExpanded}
+                            aria-controls="bundle-transfer-content"
+                        >
+                            {isBundleExpanded ? 'Hide Advanced' : 'Show Advanced'}
                         </button>
                     </div>
-                    <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen || !canExportBundle}>
-                        Export Bundle
-                    </button>
 
-                    <label className="field-label" htmlFor="import-profile-input">Import profile bundle</label>
-                    <div className="field-row bundle-row">
-                        <input
-                            id="import-profile-input"
-                            value={importProfileName}
-                            onChange={(event) => setImportProfileName(event.target.value)}
-                            placeholder="Target profile name"
-                            disabled={isLoading || isModalOpen}
-                        />
-                        <input
-                            id="import-bundle-path-input"
-                            value={importBundlePath}
-                            onChange={(event) => setImportBundlePath(event.target.value)}
-                            placeholder="C:\\Path\\to\\profile.zip"
-                            disabled={isLoading || isModalOpen}
-                        />
-                        <button className="action-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading || isModalOpen}>
-                            Browse...
-                        </button>
-                    </div>
-                    <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen || !canImportBundle}>
-                        Import Bundle
-                    </button>
+                    {isBundleExpanded && (
+                        <div id="bundle-transfer-content" className="bundle-content">
+                            <label className="field-label" htmlFor="export-profile-input">Export profile to .zip</label>
+                            <div className="field-row bundle-row">
+                                <input
+                                    id="export-profile-input"
+                                    value={exportProfileName}
+                                    onChange={(event) => setExportProfileName(event.target.value)}
+                                    placeholder="Profile name to export"
+                                    disabled={isLoading || isModalOpen}
+                                />
+                                <input
+                                    id="export-bundle-path-input"
+                                    value={exportBundlePath}
+                                    onChange={(event) => setExportBundlePath(event.target.value)}
+                                    placeholder="Destination .zip path"
+                                    disabled={isLoading || isModalOpen}
+                                />
+                                <button className="action-btn secondary" onClick={() => void onPickExportBundlePath()} disabled={isLoading || isModalOpen}>
+                                    Browse...
+                                </button>
+                            </div>
+                            <p className="field-hint">Choose where the exported `.zip` will be saved.</p>
+                            <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen || !canExportBundle}>
+                                Export Bundle
+                            </button>
+
+                            <label className="field-label" htmlFor="import-profile-input">Import .zip into profile</label>
+                            <div className="field-row bundle-row">
+                                <input
+                                    id="import-profile-input"
+                                    value={importProfileName}
+                                    onChange={(event) => setImportProfileName(event.target.value)}
+                                    placeholder="Target profile name"
+                                    disabled={isLoading || isModalOpen}
+                                />
+                                <input
+                                    id="import-bundle-path-input"
+                                    value={importBundlePath}
+                                    onChange={(event) => setImportBundlePath(event.target.value)}
+                                    placeholder="Source .zip path"
+                                    disabled={isLoading || isModalOpen}
+                                />
+                                <button className="action-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading || isModalOpen}>
+                                    Browse...
+                                </button>
+                            </div>
+                            <p className="field-hint">Select an exported `.zip` file to restore into the target profile.</p>
+                            <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen || !canImportBundle}>
+                                Import Bundle
+                            </button>
+                        </div>
+                    )}
                 </section>
             </main>
             <footer className="footnote">
