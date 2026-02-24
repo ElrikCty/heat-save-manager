@@ -16,6 +16,78 @@ type Profile = {
     name: string;
 };
 
+type ErrorFeedback = {
+    message: string;
+    hint: string;
+};
+
+function normalizeError(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    return String(error);
+}
+
+function toErrorFeedback(error: unknown, fallback: string): ErrorFeedback {
+    const detail = normalizeError(error);
+    const lowered = detail.toLowerCase();
+
+    if (lowered.includes('cannot delete active profile')) {
+        return {
+            message: 'You cannot delete the active profile.',
+            hint: 'Switch to a different profile, then delete this one.',
+        };
+    }
+
+    if (lowered.includes('root savegame folder is missing') || lowered.includes('root wraps folder is missing')) {
+        return {
+            message: 'Current root save folders are missing.',
+            hint: 'Open the game once to regenerate save folders, then try again.',
+        };
+    }
+
+    if (lowered.includes('savegame path') || lowered.includes('path must point to the savegame folder')) {
+        return {
+            message: 'SaveGame path is invalid.',
+            hint: 'Set the exact SaveGame directory path in the path panel.',
+        };
+    }
+
+    if (lowered.includes('invalid characters') || lowered.includes('profile name is required')) {
+        return {
+            message: 'Profile name is invalid.',
+            hint: 'Use letters/numbers and avoid Windows invalid filename characters.',
+        };
+    }
+
+    if (lowered.includes('already exists')) {
+        return {
+            message: 'That profile name already exists.',
+            hint: 'Pick another name or rename the existing profile first.',
+        };
+    }
+
+    if (lowered.includes('profile not found')) {
+        return {
+            message: 'Selected profile no longer exists.',
+            hint: 'Refresh profiles and try again.',
+        };
+    }
+
+    if (lowered.includes('access is denied') || lowered.includes('being used by another process')) {
+        return {
+            message: 'Files are currently locked by another process.',
+            hint: 'Close the game and any tools touching save files, then retry.',
+        };
+    }
+
+    return {
+        message: `${fallback}: ${detail}`,
+        hint: '',
+    };
+}
+
 function App() {
     const [saveGamePath, setSaveGamePath] = useState('');
     const [saveGamePathInput, setSaveGamePathInput] = useState('');
@@ -24,6 +96,7 @@ function App() {
     const [freshProfileName, setFreshProfileName] = useState('');
     const [saveProfileName, setSaveProfileName] = useState('');
     const [status, setStatus] = useState('Loading profiles...');
+    const [recoveryHint, setRecoveryHint] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [renameTarget, setRenameTarget] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
@@ -53,8 +126,11 @@ function App() {
             }
 
             setStatus('Ready');
+            setRecoveryHint('');
         } catch (error) {
-            setStatus(`Failed to load profiles: ${String(error)}`);
+            const feedback = toErrorFeedback(error, 'Failed to load profiles');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
         } finally {
             setIsLoading(false);
         }
@@ -76,11 +152,14 @@ function App() {
         try {
             setIsLoading(true);
             setStatus('Applying SaveGame path...');
+            setRecoveryHint('');
             await SetSaveGamePath(trimmed);
             await loadData();
             setStatus('SaveGame path updated.');
         } catch (error) {
-            setStatus(`Path update failed: ${String(error)}`);
+            const feedback = toErrorFeedback(error, 'Path update failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
         } finally {
             setIsLoading(false);
         }
@@ -90,11 +169,14 @@ function App() {
         try {
             setStatus(`Switching to ${profileName}...`);
             setIsLoading(true);
+            setRecoveryHint('');
             await SwitchProfile(profileName);
             setActiveProfile(profileName);
             setStatus(`Active profile: ${profileName}`);
         } catch (error) {
-            setStatus(`Switch failed: ${String(error)}`);
+            const feedback = toErrorFeedback(error, 'Switch failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
         } finally {
             setIsLoading(false);
         }
@@ -110,13 +192,16 @@ function App() {
         try {
             setIsLoading(true);
             setStatus(`Preparing fresh profile ${name}...`);
+            setRecoveryHint('');
             await PrepareFreshProfile(name);
             setFreshProfileName('');
             setActiveProfile(name);
             await loadData();
             setStatus(`Fresh profile prepared: ${name}. Start the game to generate a new save.`);
         } catch (error) {
-            setStatus(`Fresh profile prep failed: ${String(error)}`);
+            const feedback = toErrorFeedback(error, 'Fresh profile prep failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
         } finally {
             setIsLoading(false);
         }
@@ -129,12 +214,15 @@ function App() {
         try {
             setIsLoading(true);
             setStatus(`Saving current root data into ${target}...`);
+            setRecoveryHint('');
             await SaveCurrentProfile(requested);
             setSaveProfileName('');
             await loadData();
             setStatus(`Current root save exported to ${target}.`);
         } catch (error) {
-            setStatus(`Save current failed: ${String(error)}`);
+            const feedback = toErrorFeedback(error, 'Save current failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
         } finally {
             setIsLoading(false);
         }
@@ -164,12 +252,15 @@ function App() {
         try {
             setIsLoading(true);
             setStatus(`Renaming ${renameTarget} to ${nextName}...`);
+            setRecoveryHint('');
             await RenameProfile(renameTarget, nextName);
             await loadData();
             setStatus(`Profile renamed to ${nextName}.`);
             closeRenameModal();
         } catch (error) {
-            setStatus(`Rename failed: ${String(error)}`);
+            const feedback = toErrorFeedback(error, 'Rename failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
         } finally {
             setIsLoading(false);
         }
@@ -202,12 +293,15 @@ function App() {
         try {
             setIsLoading(true);
             setStatus(`Deleting ${deleteTarget}...`);
+            setRecoveryHint('');
             await DeleteProfile(deleteTarget);
             await loadData();
             setStatus(`Profile deleted: ${deleteTarget}.`);
             closeDeleteModal();
         } catch (error) {
-            setStatus(`Delete failed: ${String(error)}`);
+            const feedback = toErrorFeedback(error, 'Delete failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
         } finally {
             setIsLoading(false);
         }
@@ -239,6 +333,7 @@ function App() {
                 <p className="eyebrow">Need for Speed Heat</p>
                 <h1>Heat Save Manager</h1>
                 <p className={`status ${statusTone}`}>{status}</p>
+                {recoveryHint && <p className="status-hint">Tip: {recoveryHint}</p>}
             </header>
 
             <main className="dashboard">
