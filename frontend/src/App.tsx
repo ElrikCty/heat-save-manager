@@ -1,7 +1,9 @@
 import {useEffect, useState} from 'react';
 import './App.css';
 import {
+    CreateMarkerFile,
     DeleteProfile,
+    EnsureProfilesFolder,
     ExportProfileBundle,
     GetActiveProfile,
     GetPaths,
@@ -138,6 +140,7 @@ function App() {
     const [renameTarget, setRenameTarget] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+    const [markerQuickProfile, setMarkerQuickProfile] = useState('');
 
     const isModalOpen = renameTarget !== null || deleteTarget !== null;
 
@@ -153,6 +156,9 @@ function App() {
     const canSaveCurrent = saveProfileName.trim() !== '' || activeProfile.trim() !== '';
     const canExportBundle = exportProfileName.trim() !== '' && exportBundlePath.trim() !== '';
     const canImportBundle = importProfileName.trim() !== '' && importBundlePath.trim() !== '';
+    const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
+    const needsProfilesFolderFix = healthReport?.items.some((item) => item.name === 'profiles_path' && !item.ok) ?? false;
+    const needsMarkerFileFix = markerHealthItem?.message.toLowerCase().includes('is missing') ?? false;
 
     async function loadData() {
         try {
@@ -161,6 +167,13 @@ function App() {
             setSaveGamePath(paths.saveGamePath);
             setSaveGamePathInput(paths.saveGamePath);
             setProfiles(profileItems);
+            setMarkerQuickProfile((current) => {
+                if (current && profileItems.some((profile) => profile.name === current)) {
+                    return current;
+                }
+
+                return profileItems[0]?.name ?? '';
+            });
             setHealthReport(health);
 
             try {
@@ -220,6 +233,47 @@ function App() {
             setStatus('SaveGame path updated.');
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Path update failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    async function onEnsureProfilesFolder() {
+        try {
+            setIsLoading(true);
+            setStatus('Creating Profiles folder...');
+            setRecoveryHint('');
+            await EnsureProfilesFolder();
+            await loadData();
+            setStatus('Profiles folder is ready.');
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Failed to create Profiles folder');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    async function onCreateMarkerFile() {
+        const selectedProfile = markerQuickProfile.trim();
+        if (!selectedProfile) {
+            setStatus('Select a profile first to create active_profile.txt.');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            setStatus(`Creating marker for ${selectedProfile}...`);
+            setRecoveryHint('');
+            await CreateMarkerFile(selectedProfile);
+            setActiveProfile(selectedProfile);
+            await loadData();
+            setStatus(`active_profile.txt created for ${selectedProfile}.`);
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Failed to create marker file');
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -582,6 +636,40 @@ function App() {
                     <button className="refresh-btn" onClick={() => void onRunHealthCheck()} disabled={isLoading || isModalOpen}>
                         {isLoading ? 'Running...' : 'Run Diagnostics'}
                     </button>
+                    {(needsProfilesFolderFix || needsMarkerFileFix) && (
+                        <div className="diag-actions">
+                            <h3>Quick Actions</h3>
+                            {needsProfilesFolderFix && (
+                                <button className="action-btn secondary" onClick={() => void onEnsureProfilesFolder()} disabled={isLoading || isModalOpen}>
+                                    Create Profiles folder
+                                </button>
+                            )}
+                            {needsMarkerFileFix && (
+                                <>
+                                    {profiles.length > 0 ? (
+                                        <div className="field-row">
+                                            <select
+                                                value={markerQuickProfile}
+                                                onChange={(event) => setMarkerQuickProfile(event.target.value)}
+                                                disabled={isLoading || isModalOpen}
+                                            >
+                                                {profiles.map((profile) => (
+                                                    <option key={profile.name} value={profile.name}>
+                                                        {profile.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <button className="action-btn secondary" onClick={() => void onCreateMarkerFile()} disabled={isLoading || isModalOpen || !markerQuickProfile.trim()}>
+                                                Create marker file
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <p className="field-hint">Create a profile first, then run this quick action again.</p>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
                     {healthReport && (
                         <ul className="health-list">
                             {healthReport.items.map((item) => (

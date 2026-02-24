@@ -123,6 +123,18 @@
     border-color: rgba(255, 142, 142, 0.55);
 }
 
+.diag-actions {
+    margin-top: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.diag-actions h3 {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
 .dashboard {
     max-width: 980px;
     margin: 0 auto;
@@ -228,11 +240,20 @@
     color: var(--text-main);
 }
 
+.field-row select {
+    border: 1px solid rgba(162, 181, 200, 0.25);
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-main);
+}
+
 .field-row input::placeholder {
     color: var(--text-muted);
 }
 
 .field-row input:disabled,
+.field-row select:disabled,
 .action-btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;

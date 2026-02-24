@@ -6,6 +6,8 @@ import {switcher} from '../models';
 
 export function DeleteProfile(arg1:string):Promise<void>;
 
+export function EnsureProfilesFolder():Promise<void>;
+
 export function ExportProfileBundle(arg1:string,arg2:string):Promise<void>;
 
 export function GetActiveProfile():Promise<string>;
@@ -29,5 +31,7 @@ export function RunHealthCheck():Promise<health.Report>;
 export function SaveCurrentProfile(arg1:string):Promise<void>;
 
 export function SetSaveGamePath(arg1:string):Promise<void>;
+
+export function CreateMarkerFile(arg1:string):Promise<void>;
 
 export function SwitchProfile(arg1:string):Promise<switcher.Result>;

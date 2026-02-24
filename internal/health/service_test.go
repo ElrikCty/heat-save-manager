@@ -88,6 +88,37 @@ func TestRunWarnsWhenMarkerDoesNotMatchProfile(t *testing.T) {
 	}
 }
 
+func TestRunNotReadyWhenMarkerMissing(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+
+	createDir(t, filepath.Join(saveGamePath, "savegame"))
+	createDir(t, filepath.Join(saveGamePath, "wraps"))
+	createDir(t, profilesPath)
+
+	svc := NewService(saveGamePath, profilesPath)
+	report := svc.Run()
+
+	if report.Ready {
+		t.Fatal("expected report not ready when marker file is missing")
+	}
+
+	foundError := false
+	for _, item := range report.Items {
+		if item.Name == "marker_file" && item.Severity == "error" {
+			foundError = true
+			break
+		}
+	}
+
+	if !foundError {
+		t.Fatal("expected marker_file error when marker file is missing")
+	}
+}
+
 func createDir(t *testing.T, path string) {
 	t.Helper()
 	if err := os.MkdirAll(path, 0o755); err != nil {

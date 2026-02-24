@@ -143,6 +143,63 @@ func (a *App) RunHealthCheck() health.Report {
 	return health.NewService(a.saveGamePath, a.profilesPath).Run()
 }
 
+func (a *App) EnsureProfilesFolder() error {
+	if strings.TrimSpace(a.saveGamePath) == "" {
+		return errors.New("savegame path is not configured")
+	}
+
+	if strings.TrimSpace(a.profilesPath) == "" {
+		a.profilesPath = filepath.Join(a.saveGamePath, "Profiles")
+	}
+
+	if err := os.MkdirAll(a.profilesPath, 0o755); err != nil {
+		return fmt.Errorf("ensure Profiles folder: %w", err)
+	}
+
+	return nil
+}
+
+func (a *App) CreateMarkerFile(profileName string) error {
+	if strings.TrimSpace(a.saveGamePath) == "" {
+		return errors.New("savegame path is not configured")
+	}
+
+	if err := a.EnsureProfilesFolder(); err != nil {
+		return err
+	}
+
+	trimmed := strings.TrimSpace(profileName)
+	if trimmed == "" {
+		return marker.ErrProfileNameRequired
+	}
+
+	profilePath := filepath.Join(a.profilesPath, trimmed)
+	info, err := os.Stat(profilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return errors.New("profile not found")
+		}
+		return fmt.Errorf("inspect profile folder: %w", err)
+	}
+
+	if !info.IsDir() {
+		return errors.New("profile not found")
+	}
+
+	store := a.newMarkerStore()
+	if _, err := os.Stat(store.Path()); err == nil {
+		return errors.New("active_profile.txt already exists")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect active_profile.txt: %w", err)
+	}
+
+	if err := store.WriteActiveProfile(trimmed); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (a *App) ExportProfileBundle(profileName string, bundlePath string) error {
 	return bundle.NewService(a.profilesPath).ExportProfile(profileName, bundlePath)
 }
