@@ -25,6 +25,11 @@ function App() {
     const [saveProfileName, setSaveProfileName] = useState('');
     const [status, setStatus] = useState('Loading profiles...');
     const [isLoading, setIsLoading] = useState(true);
+    const [renameTarget, setRenameTarget] = useState<string | null>(null);
+    const [renameValue, setRenameValue] = useState('');
+    const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+    const isModalOpen = renameTarget !== null || deleteTarget !== null;
 
     const statusTone = status.startsWith('Failed') || status.startsWith('Switch failed')
         ? 'danger'
@@ -135,18 +140,34 @@ function App() {
         }
     }
 
-    async function onRenameProfile(oldName: string) {
-        const newName = window.prompt(`Rename profile "${oldName}" to:`, oldName);
-        if (!newName || newName.trim() === '' || newName.trim() === oldName) {
+    function openRenameModal(profileName: string) {
+        setRenameTarget(profileName);
+        setRenameValue(profileName);
+    }
+
+    function closeRenameModal() {
+        setRenameTarget(null);
+        setRenameValue('');
+    }
+
+    async function confirmRenameProfile() {
+        if (!renameTarget) {
+            return;
+        }
+
+        const nextName = renameValue.trim();
+        if (!nextName || nextName === renameTarget) {
+            closeRenameModal();
             return;
         }
 
         try {
             setIsLoading(true);
-            setStatus(`Renaming ${oldName} to ${newName.trim()}...`);
-            await RenameProfile(oldName, newName.trim());
+            setStatus(`Renaming ${renameTarget} to ${nextName}...`);
+            await RenameProfile(renameTarget, nextName);
             await loadData();
-            setStatus(`Profile renamed to ${newName.trim()}.`);
+            setStatus(`Profile renamed to ${nextName}.`);
+            closeRenameModal();
         } catch (error) {
             setStatus(`Rename failed: ${String(error)}`);
         } finally {
@@ -154,18 +175,26 @@ function App() {
         }
     }
 
-    async function onDeleteProfile(profileName: string) {
-        const shouldDelete = window.confirm(`Delete profile "${profileName}"? This cannot be undone.`);
-        if (!shouldDelete) {
+    function openDeleteModal(profileName: string) {
+        setDeleteTarget(profileName);
+    }
+
+    function closeDeleteModal() {
+        setDeleteTarget(null);
+    }
+
+    async function confirmDeleteProfile() {
+        if (!deleteTarget) {
             return;
         }
 
         try {
             setIsLoading(true);
-            setStatus(`Deleting ${profileName}...`);
-            await DeleteProfile(profileName);
+            setStatus(`Deleting ${deleteTarget}...`);
+            await DeleteProfile(deleteTarget);
             await loadData();
-            setStatus(`Profile deleted: ${profileName}.`);
+            setStatus(`Profile deleted: ${deleteTarget}.`);
+            closeDeleteModal();
         } catch (error) {
             setStatus(`Delete failed: ${String(error)}`);
         } finally {
@@ -195,14 +224,14 @@ function App() {
                             value={saveGamePathInput}
                             onChange={(event) => setSaveGamePathInput(event.target.value)}
                             placeholder="C:\\Users\\<you>\\Documents\\Need for speed heat\\SaveGame"
-                            disabled={isLoading}
+                            disabled={isLoading || isModalOpen}
                         />
-                        <button className="action-btn secondary" onClick={() => void onApplyPath()} disabled={isLoading}>
+                        <button className="action-btn secondary" onClick={() => void onApplyPath()} disabled={isLoading || isModalOpen}>
                             Apply Path
                         </button>
                     </div>
                     <p className="field-hint">Path must point directly to the `SaveGame` folder.</p>
-                    <button className="refresh-btn" onClick={() => void loadData()} disabled={isLoading}>
+                    <button className="refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
                         {isLoading ? 'Refreshing...' : 'Refresh'}
                     </button>
                 </section>
@@ -216,9 +245,9 @@ function App() {
                             value={freshProfileName}
                             onChange={(event) => setFreshProfileName(event.target.value)}
                             placeholder="New profile name"
-                            disabled={isLoading}
+                            disabled={isLoading || isModalOpen}
                         />
-                        <button className="action-btn" onClick={() => void onPrepareFresh()} disabled={isLoading}>
+                        <button className="action-btn" onClick={() => void onPrepareFresh()} disabled={isLoading || isModalOpen}>
                             Prepare
                         </button>
                     </div>
@@ -230,9 +259,9 @@ function App() {
                             value={saveProfileName}
                             onChange={(event) => setSaveProfileName(event.target.value)}
                             placeholder="Leave blank to use active"
-                            disabled={isLoading}
+                            disabled={isLoading || isModalOpen}
                         />
-                        <button className="action-btn secondary" onClick={() => void onSaveCurrent()} disabled={isLoading}>
+                        <button className="action-btn secondary" onClick={() => void onSaveCurrent()} disabled={isLoading || isModalOpen}>
                             Save
                         </button>
                     </div>
@@ -255,21 +284,21 @@ function App() {
                                         <button
                                             className="switch-btn"
                                             onClick={() => void onSwitch(profile.name)}
-                                            disabled={isLoading || isActive}
+                                            disabled={isLoading || isActive || isModalOpen}
                                         >
                                             {isActive ? 'Active' : 'Switch'}
                                         </button>
                                         <button
                                             className="switch-btn secondary"
-                                            onClick={() => void onRenameProfile(profile.name)}
-                                            disabled={isLoading}
+                                            onClick={() => openRenameModal(profile.name)}
+                                            disabled={isLoading || isModalOpen}
                                         >
                                             Rename
                                         </button>
                                         <button
                                             className="switch-btn danger"
-                                            onClick={() => void onDeleteProfile(profile.name)}
-                                            disabled={isLoading || isActive}
+                                            onClick={() => openDeleteModal(profile.name)}
+                                            disabled={isLoading || isActive || isModalOpen}
                                         >
                                             Delete
                                         </button>
@@ -283,6 +312,46 @@ function App() {
             <footer className="footnote">
                 <p>Marker file: active_profile.txt</p>
             </footer>
+
+            {renameTarget && (
+                <div className="modal-overlay" role="dialog" aria-modal="true">
+                    <div className="modal-card">
+                        <h3>Rename Profile</h3>
+                        <p>Choose a new name for <strong>{renameTarget}</strong>.</p>
+                        <input
+                            value={renameValue}
+                            onChange={(event) => setRenameValue(event.target.value)}
+                            disabled={isLoading}
+                            autoFocus
+                        />
+                        <div className="modal-actions">
+                            <button className="switch-btn secondary" onClick={closeRenameModal} disabled={isLoading}>
+                                Cancel
+                            </button>
+                            <button className="action-btn" onClick={() => void confirmRenameProfile()} disabled={isLoading}>
+                                Rename
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {deleteTarget && (
+                <div className="modal-overlay" role="dialog" aria-modal="true">
+                    <div className="modal-card danger">
+                        <h3>Delete Profile</h3>
+                        <p>Delete <strong>{deleteTarget}</strong>? This action cannot be undone.</p>
+                        <div className="modal-actions">
+                            <button className="switch-btn secondary" onClick={closeDeleteModal} disabled={isLoading}>
+                                Cancel
+                            </button>
+                            <button className="switch-btn danger" onClick={() => void confirmDeleteProfile()} disabled={isLoading}>
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
