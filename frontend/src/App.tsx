@@ -2,8 +2,10 @@ import {useEffect, useState} from 'react';
 import './App.css';
 import {
     DeleteProfile,
+    ExportProfileBundle,
     GetActiveProfile,
     GetPaths,
+    ImportProfileBundle,
     ListProfiles,
     PrepareFreshProfile,
     RenameProfile,
@@ -96,6 +98,20 @@ function toErrorFeedback(error: unknown, fallback: string): ErrorFeedback {
         };
     }
 
+    if (lowered.includes('bundle contains invalid file path')) {
+        return {
+            message: 'Bundle file is unsafe or malformed.',
+            hint: 'Use a bundle exported by this app and try again.',
+        };
+    }
+
+    if (lowered.includes('invalid profile layout')) {
+        return {
+            message: 'Profile bundle is missing required folders.',
+            hint: 'Bundle must include both savegame and wraps folders.',
+        };
+    }
+
     return {
         message: `${fallback}: ${detail}`,
         hint: '',
@@ -109,6 +125,10 @@ function App() {
     const [activeProfile, setActiveProfile] = useState('');
     const [freshProfileName, setFreshProfileName] = useState('');
     const [saveProfileName, setSaveProfileName] = useState('');
+    const [exportProfileName, setExportProfileName] = useState('');
+    const [exportBundlePath, setExportBundlePath] = useState('');
+    const [importProfileName, setImportProfileName] = useState('');
+    const [importBundlePath, setImportBundlePath] = useState('');
     const [status, setStatus] = useState('Loading profiles...');
     const [recoveryHint, setRecoveryHint] = useState('');
     const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
@@ -254,6 +274,53 @@ function App() {
             setStatus(`Current root save exported to ${target}.`);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Save current failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    async function onExportBundle() {
+        const profileName = exportProfileName.trim();
+        const bundlePath = exportBundlePath.trim();
+        if (!profileName || !bundlePath) {
+            setStatus('Enter profile name and destination bundle path to export.');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            setStatus(`Exporting ${profileName} bundle...`);
+            setRecoveryHint('');
+            await ExportProfileBundle(profileName, bundlePath);
+            setStatus(`Bundle exported: ${bundlePath}`);
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Bundle export failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    async function onImportBundle() {
+        const profileName = importProfileName.trim();
+        const bundlePath = importBundlePath.trim();
+        if (!profileName || !bundlePath) {
+            setStatus('Enter profile name and source bundle path to import.');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            setStatus(`Importing bundle into ${profileName}...`);
+            setRecoveryHint('');
+            await ImportProfileBundle(profileName, bundlePath);
+            await loadData();
+            setStatus(`Bundle imported into profile ${profileName}.`);
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Bundle import failed');
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -490,6 +557,52 @@ function App() {
                             ))}
                         </ul>
                     )}
+                </section>
+
+                <section className="panel bundle-panel">
+                    <h2>Bundle Transfer</h2>
+
+                    <label className="field-label" htmlFor="export-profile-input">Export profile bundle</label>
+                    <div className="field-row bundle-row">
+                        <input
+                            id="export-profile-input"
+                            value={exportProfileName}
+                            onChange={(event) => setExportProfileName(event.target.value)}
+                            placeholder="Profile name"
+                            disabled={isLoading || isModalOpen}
+                        />
+                        <input
+                            id="export-bundle-path-input"
+                            value={exportBundlePath}
+                            onChange={(event) => setExportBundlePath(event.target.value)}
+                            placeholder="C:\\Path\\to\\profile.zip"
+                            disabled={isLoading || isModalOpen}
+                        />
+                    </div>
+                    <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen}>
+                        Export Bundle
+                    </button>
+
+                    <label className="field-label" htmlFor="import-profile-input">Import profile bundle</label>
+                    <div className="field-row bundle-row">
+                        <input
+                            id="import-profile-input"
+                            value={importProfileName}
+                            onChange={(event) => setImportProfileName(event.target.value)}
+                            placeholder="Target profile name"
+                            disabled={isLoading || isModalOpen}
+                        />
+                        <input
+                            id="import-bundle-path-input"
+                            value={importBundlePath}
+                            onChange={(event) => setImportBundlePath(event.target.value)}
+                            placeholder="C:\\Path\\to\\profile.zip"
+                            disabled={isLoading || isModalOpen}
+                        />
+                    </div>
+                    <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen}>
+                        Import Bundle
+                    </button>
                 </section>
             </main>
             <footer className="footnote">

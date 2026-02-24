@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"heat-save-manager/internal/bundle"
 	"heat-save-manager/internal/config"
 	"heat-save-manager/internal/discovery"
 	"heat-save-manager/internal/fsops"
@@ -139,6 +140,14 @@ func (a *App) DeleteProfile(profileName string) error {
 
 func (a *App) RunHealthCheck() health.Report {
 	return health.NewService(a.saveGamePath, a.profilesPath).Run()
+}
+
+func (a *App) ExportProfileBundle(profileName string, bundlePath string) error {
+	return bundle.NewService(a.profilesPath).ExportProfile(profileName, bundlePath)
+}
+
+func (a *App) ImportProfileBundle(profileName string, bundlePath string) error {
+	return bundle.NewService(a.profilesPath).ImportProfile(profileName, bundlePath)
 }
 
 func (a *App) newLifecycleService() *lifecycle.Service {

@@ -6,12 +6,20 @@ export function DeleteProfile(arg1) {
   return window['go']['main']['App']['DeleteProfile'](arg1);
 }
 
+export function ExportProfileBundle(arg1, arg2) {
+  return window['go']['main']['App']['ExportProfileBundle'](arg1, arg2);
+}
+
 export function GetActiveProfile() {
   return window['go']['main']['App']['GetActiveProfile']();
 }
 
 export function GetPaths() {
   return window['go']['main']['App']['GetPaths']();
+}
+
+export function ImportProfileBundle(arg1, arg2) {
+  return window['go']['main']['App']['ImportProfileBundle'](arg1, arg2);
 }
 
 export function ListProfiles() {
