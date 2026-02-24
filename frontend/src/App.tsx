@@ -122,6 +122,14 @@ function toErrorFeedback(error: unknown, fallback: string): ErrorFeedback {
     };
 }
 
+function maskWindowsUserPath(path: string): string {
+    if (!path) {
+        return path;
+    }
+
+    return path.replace(/([\\/]Users[\\/])[^\\/]+/i, '$1<user>');
+}
+
 function App() {
     const [saveGamePath, setSaveGamePath] = useState('');
     const [saveGamePathInput, setSaveGamePathInput] = useState('');
@@ -705,13 +713,13 @@ function App() {
                         <h2>Save Setup</h2>
                         <div className="setup-group">
                             <label className="field-label" htmlFor="savegame-path-input">SaveGame Path</label>
-                            <p className="path">{saveGamePath || 'Not set'}</p>
+                            <p className="path">{saveGamePath ? maskWindowsUserPath(saveGamePath) : 'Not set'}</p>
                             <div className="field-row">
                                 <input
                                     id="savegame-path-input"
                                     value={saveGamePathInput}
                                     onChange={(event) => setSaveGamePathInput(event.target.value)}
-                                    placeholder="C:\\Users\\<you>\\Documents\\Need for speed heat\\SaveGame"
+                                    placeholder="C:\\Users\\<user>\\Documents\\Need for speed heat\\SaveGame"
                                     disabled={isLoading || isModalOpen}
                                 />
                                 <button className="action-btn secondary" onClick={() => void onApplyPath()} disabled={isLoading || isModalOpen || !canApplyPath}>
