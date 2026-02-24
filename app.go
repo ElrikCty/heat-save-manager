@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"heat-save-manager/internal/config"
 	"heat-save-manager/internal/discovery"
 	"heat-save-manager/internal/fsops"
 	"heat-save-manager/internal/lifecycle"
@@ -21,11 +22,17 @@ type App struct {
 	ctx          context.Context
 	saveGamePath string
 	profilesPath string
+	configStore  *config.Store
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	return &App{}
+	store, err := config.NewStore()
+	if err != nil {
+		store = nil
+	}
+
+	return &App{configStore: store}
 }
 
 // startup is called when the app starts. The context is saved
@@ -33,6 +40,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.initDefaultPaths()
+	a.applySavedSettings()
 }
 
 type ProfileItem struct {
@@ -61,38 +69,21 @@ func (a *App) initDefaultPaths() {
 }
 
 func (a *App) SetSaveGamePath(saveGamePath string) error {
-	trimmed := strings.TrimSpace(saveGamePath)
-	if trimmed == "" {
-		return errors.New("savegame path is required")
+	if err := a.applySaveGamePath(saveGamePath); err != nil {
+		return err
 	}
 
-	if !filepath.IsAbs(trimmed) {
-		return errors.New("savegame path must be absolute")
+	if a.configStore == nil {
+		return nil
 	}
 
-	info, err := os.Stat(trimmed)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return errors.New("savegame path does not exist")
-		}
-		return fmt.Errorf("read savegame path: %w", err)
-	}
+	cfg := config.Default()
+	cfg.SaveGamePath = a.saveGamePath
+	cfg.ProfilesPath = a.profilesPath
 
-	if !info.IsDir() {
-		return errors.New("savegame path must be a directory")
+	if err := a.configStore.Save(cfg); err != nil {
+		return fmt.Errorf("save app settings: %w", err)
 	}
-
-	if !strings.EqualFold(filepath.Base(trimmed), "SaveGame") {
-		return errors.New("path must point to the SaveGame folder")
-	}
-
-	profilesPath := filepath.Join(trimmed, "Profiles")
-	if err := os.MkdirAll(profilesPath, 0o755); err != nil {
-		return fmt.Errorf("ensure Profiles folder: %w", err)
-	}
-
-	a.saveGamePath = trimmed
-	a.profilesPath = profilesPath
 
 	return nil
 }
@@ -151,4 +142,58 @@ func (a *App) newLifecycleService() *lifecycle.Service {
 
 func (a *App) newMarkerStore() *marker.Store {
 	return marker.NewStore(a.saveGamePath)
+}
+
+func (a *App) applySavedSettings() {
+	if a.configStore == nil {
+		return
+	}
+
+	cfg, err := a.configStore.Load()
+	if err != nil {
+		return
+	}
+
+	if strings.TrimSpace(cfg.SaveGamePath) == "" {
+		return
+	}
+
+	_ = a.applySaveGamePath(cfg.SaveGamePath)
+}
+
+func (a *App) applySaveGamePath(saveGamePath string) error {
+	trimmed := strings.TrimSpace(saveGamePath)
+	if trimmed == "" {
+		return errors.New("savegame path is required")
+	}
+
+	if !filepath.IsAbs(trimmed) {
+		return errors.New("savegame path must be absolute")
+	}
+
+	info, err := os.Stat(trimmed)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return errors.New("savegame path does not exist")
+		}
+		return fmt.Errorf("read savegame path: %w", err)
+	}
+
+	if !info.IsDir() {
+		return errors.New("savegame path must be a directory")
+	}
+
+	if !strings.EqualFold(filepath.Base(trimmed), "SaveGame") {
+		return errors.New("path must point to the SaveGame folder")
+	}
+
+	profilesPath := filepath.Join(trimmed, "Profiles")
+	if err := os.MkdirAll(profilesPath, 0o755); err != nil {
+		return fmt.Errorf("ensure Profiles folder: %w", err)
+	}
+
+	a.saveGamePath = trimmed
+	a.profilesPath = profilesPath
+
+	return nil
 }
