@@ -123,6 +123,18 @@
     border-color: rgba(255, 142, 142, 0.55);
 }
 
+.diag-actions {
+    margin-top: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.diag-actions h3 {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
 .dashboard {
     max-width: 980px;
     margin: 0 auto;
@@ -178,6 +190,21 @@
     margin-top: 0.55rem;
 }
 
+.bundle-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.bundle-header-row .field-hint {
+    margin: 0.25rem 0 0;
+}
+
+.bundle-content {
+    margin-top: 0.8rem;
+}
+
 .refresh-btn {
     width: 100%;
     margin-top: 0.65rem;
@@ -228,11 +255,20 @@
     color: var(--text-main);
 }
 
+.field-row select {
+    border: 1px solid rgba(162, 181, 200, 0.25);
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-main);
+}
+
 .field-row input::placeholder {
     color: var(--text-muted);
 }
 
 .field-row input:disabled,
+.field-row select:disabled,
 .action-btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
@@ -245,10 +281,11 @@
 }
 
 .profile-card {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.75rem;
+    column-gap: 0.85rem;
+    row-gap: 0.5rem;
     padding: 0.8rem;
     border-radius: 12px;
     border: 1px solid rgba(162, 181, 200, 0.22);
@@ -271,7 +308,7 @@
 }
 
 .switch-btn {
-    min-width: 76px;
+    min-width: 86px;
     padding: 0.48rem 0.8rem;
     color: #f1f7fc;
     background: rgba(255, 255, 255, 0.08);
@@ -287,9 +324,11 @@
 }
 
 .profile-actions {
-    display: flex;
-    gap: 0.45rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(86px, 1fr));
+    gap: 0.4rem;
     align-items: center;
+    justify-content: end;
 }
 
 .profile-card.active .switch-btn {
@@ -369,11 +408,15 @@
 
     .profile-card {
         align-items: flex-start;
-        flex-direction: column;
+        grid-template-columns: 1fr;
     }
 
-    .profile-actions,
     .field-row {
+        width: 100%;
+        grid-template-columns: 1fr;
+    }
+
+    .profile-actions {
         width: 100%;
         grid-template-columns: 1fr;
     }
@@ -384,5 +427,9 @@
 
     .action-btn {
         width: 100%;
+    }
+
+    .bundle-header-row {
+        flex-direction: column;
     }
 }

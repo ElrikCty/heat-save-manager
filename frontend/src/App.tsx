@@ -1,7 +1,9 @@
 import {useEffect, useState} from 'react';
 import './App.css';
 import {
+    CreateMarkerFile,
     DeleteProfile,
+    EnsureProfilesFolder,
     ExportProfileBundle,
     GetActiveProfile,
     GetPaths,
@@ -138,6 +140,8 @@ function App() {
     const [renameTarget, setRenameTarget] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+    const [markerQuickProfile, setMarkerQuickProfile] = useState('');
+    const [isBundleExpanded, setIsBundleExpanded] = useState(false);
 
     const isModalOpen = renameTarget !== null || deleteTarget !== null;
 
@@ -153,6 +157,9 @@ function App() {
     const canSaveCurrent = saveProfileName.trim() !== '' || activeProfile.trim() !== '';
     const canExportBundle = exportProfileName.trim() !== '' && exportBundlePath.trim() !== '';
     const canImportBundle = importProfileName.trim() !== '' && importBundlePath.trim() !== '';
+    const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
+    const needsProfilesFolderFix = healthReport?.items.some((item) => item.name === 'profiles_path' && !item.ok) ?? false;
+    const needsMarkerFileFix = markerHealthItem?.message.toLowerCase().includes('is missing') ?? false;
 
     async function loadData() {
         try {
@@ -161,6 +168,13 @@ function App() {
             setSaveGamePath(paths.saveGamePath);
             setSaveGamePathInput(paths.saveGamePath);
             setProfiles(profileItems);
+            setMarkerQuickProfile((current) => {
+                if (current && profileItems.some((profile) => profile.name === current)) {
+                    return current;
+                }
+
+                return profileItems[0]?.name ?? '';
+            });
             setHealthReport(health);
 
             try {
@@ -220,6 +234,47 @@ function App() {
             setStatus('SaveGame path updated.');
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Path update failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    async function onEnsureProfilesFolder() {
+        try {
+            setIsLoading(true);
+            setStatus('Creating Profiles folder...');
+            setRecoveryHint('');
+            await EnsureProfilesFolder();
+            await loadData();
+            setStatus('Profiles folder is ready.');
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Failed to create Profiles folder');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    async function onCreateMarkerFile() {
+        const selectedProfile = markerQuickProfile.trim();
+        if (!selectedProfile) {
+            setStatus('Select a profile first to create active_profile.txt.');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            setStatus(`Creating marker for ${selectedProfile}...`);
+            setRecoveryHint('');
+            await CreateMarkerFile(selectedProfile);
+            setActiveProfile(selectedProfile);
+            await loadData();
+            setStatus(`active_profile.txt created for ${selectedProfile}.`);
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Failed to create marker file');
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -494,8 +549,8 @@ function App() {
                 </section>
 
                 <section className="panel actions-panel">
-                    <h2>Lifecycle Actions</h2>
-                    <label className="field-label" htmlFor="fresh-profile-input">Prepare fresh profile</label>
+                    <h2>Save Setup</h2>
+                    <label className="field-label" htmlFor="fresh-profile-input">Start New Save</label>
                     <div className="field-row">
                         <input
                             id="fresh-profile-input"
@@ -505,11 +560,11 @@ function App() {
                             disabled={isLoading || isModalOpen}
                         />
                         <button className="action-btn" onClick={() => void onPrepareFresh()} disabled={isLoading || isModalOpen || !canPrepareFresh}>
-                            Prepare
+                            Start New Save
                         </button>
                     </div>
 
-                    <label className="field-label" htmlFor="save-profile-input">Save current root to profile</label>
+                    <label className="field-label" htmlFor="save-profile-input">Save Current Progress</label>
                     <div className="field-row">
                         <input
                             id="save-profile-input"
@@ -519,7 +574,7 @@ function App() {
                             disabled={isLoading || isModalOpen}
                         />
                         <button className="action-btn secondary" onClick={() => void onSaveCurrent()} disabled={isLoading || isModalOpen || !canSaveCurrent}>
-                            Save
+                            Save Current Progress
                         </button>
                     </div>
                 </section>
@@ -582,6 +637,40 @@ function App() {
                     <button className="refresh-btn" onClick={() => void onRunHealthCheck()} disabled={isLoading || isModalOpen}>
                         {isLoading ? 'Running...' : 'Run Diagnostics'}
                     </button>
+                    {(needsProfilesFolderFix || needsMarkerFileFix) && (
+                        <div className="diag-actions">
+                            <h3>Quick Actions</h3>
+                            {needsProfilesFolderFix && (
+                                <button className="action-btn secondary" onClick={() => void onEnsureProfilesFolder()} disabled={isLoading || isModalOpen}>
+                                    Create Profiles folder
+                                </button>
+                            )}
+                            {needsMarkerFileFix && (
+                                <>
+                                    {profiles.length > 0 ? (
+                                        <div className="field-row">
+                                            <select
+                                                value={markerQuickProfile}
+                                                onChange={(event) => setMarkerQuickProfile(event.target.value)}
+                                                disabled={isLoading || isModalOpen}
+                                            >
+                                                {profiles.map((profile) => (
+                                                    <option key={profile.name} value={profile.name}>
+                                                        {profile.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <button className="action-btn secondary" onClick={() => void onCreateMarkerFile()} disabled={isLoading || isModalOpen || !markerQuickProfile.trim()}>
+                                                Create marker file
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <p className="field-hint">Create a profile first, then run this quick action again.</p>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
                     {healthReport && (
                         <ul className="health-list">
                             {healthReport.items.map((item) => (
@@ -595,55 +684,75 @@ function App() {
                 </section>
 
                 <section className="panel bundle-panel">
-                    <h2>Bundle Transfer</h2>
-
-                    <label className="field-label" htmlFor="export-profile-input">Export profile bundle</label>
-                    <div className="field-row bundle-row">
-                        <input
-                            id="export-profile-input"
-                            value={exportProfileName}
-                            onChange={(event) => setExportProfileName(event.target.value)}
-                            placeholder="Profile name"
+                    <div className="bundle-header-row">
+                        <div>
+                            <h2>Advanced: Bundle Transfer</h2>
+                            <p className="field-hint">Use only when manually moving profiles between machines or backups.</p>
+                        </div>
+                        <button
+                            className="switch-btn secondary"
+                            onClick={() => setIsBundleExpanded((open) => !open)}
                             disabled={isLoading || isModalOpen}
-                        />
-                        <input
-                            id="export-bundle-path-input"
-                            value={exportBundlePath}
-                            onChange={(event) => setExportBundlePath(event.target.value)}
-                            placeholder="C:\\Path\\to\\profile.zip"
-                            disabled={isLoading || isModalOpen}
-                        />
-                        <button className="action-btn secondary" onClick={() => void onPickExportBundlePath()} disabled={isLoading || isModalOpen}>
-                            Browse...
+                            aria-expanded={isBundleExpanded}
+                            aria-controls="bundle-transfer-content"
+                        >
+                            {isBundleExpanded ? 'Hide Advanced' : 'Show Advanced'}
                         </button>
                     </div>
-                    <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen || !canExportBundle}>
-                        Export Bundle
-                    </button>
 
-                    <label className="field-label" htmlFor="import-profile-input">Import profile bundle</label>
-                    <div className="field-row bundle-row">
-                        <input
-                            id="import-profile-input"
-                            value={importProfileName}
-                            onChange={(event) => setImportProfileName(event.target.value)}
-                            placeholder="Target profile name"
-                            disabled={isLoading || isModalOpen}
-                        />
-                        <input
-                            id="import-bundle-path-input"
-                            value={importBundlePath}
-                            onChange={(event) => setImportBundlePath(event.target.value)}
-                            placeholder="C:\\Path\\to\\profile.zip"
-                            disabled={isLoading || isModalOpen}
-                        />
-                        <button className="action-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading || isModalOpen}>
-                            Browse...
-                        </button>
-                    </div>
-                    <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen || !canImportBundle}>
-                        Import Bundle
-                    </button>
+                    {isBundleExpanded && (
+                        <div id="bundle-transfer-content" className="bundle-content">
+                            <label className="field-label" htmlFor="export-profile-input">Export profile to .zip</label>
+                            <div className="field-row bundle-row">
+                                <input
+                                    id="export-profile-input"
+                                    value={exportProfileName}
+                                    onChange={(event) => setExportProfileName(event.target.value)}
+                                    placeholder="Profile name to export"
+                                    disabled={isLoading || isModalOpen}
+                                />
+                                <input
+                                    id="export-bundle-path-input"
+                                    value={exportBundlePath}
+                                    onChange={(event) => setExportBundlePath(event.target.value)}
+                                    placeholder="Destination .zip path"
+                                    disabled={isLoading || isModalOpen}
+                                />
+                                <button className="action-btn secondary" onClick={() => void onPickExportBundlePath()} disabled={isLoading || isModalOpen}>
+                                    Browse...
+                                </button>
+                            </div>
+                            <p className="field-hint">Choose where the exported `.zip` will be saved.</p>
+                            <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen || !canExportBundle}>
+                                Export Bundle
+                            </button>
+
+                            <label className="field-label" htmlFor="import-profile-input">Import .zip into profile</label>
+                            <div className="field-row bundle-row">
+                                <input
+                                    id="import-profile-input"
+                                    value={importProfileName}
+                                    onChange={(event) => setImportProfileName(event.target.value)}
+                                    placeholder="Target profile name"
+                                    disabled={isLoading || isModalOpen}
+                                />
+                                <input
+                                    id="import-bundle-path-input"
+                                    value={importBundlePath}
+                                    onChange={(event) => setImportBundlePath(event.target.value)}
+                                    placeholder="Source .zip path"
+                                    disabled={isLoading || isModalOpen}
+                                />
+                                <button className="action-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading || isModalOpen}>
+                                    Browse...
+                                </button>
+                            </div>
+                            <p className="field-hint">Select an exported `.zip` file to restore into the target profile.</p>
+                            <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen || !canImportBundle}>
+                                Import Bundle
+                            </button>
+                        </div>
+                    )}
                 </section>
             </main>
             <footer className="footnote">

@@ -109,15 +109,15 @@ func checkMarker(path string) (string, Item) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", Item{Name: "marker_file", Ok: false, Severity: "warn", Message: "active_profile.txt is missing."}
+			return "", Item{Name: "marker_file", Ok: false, Severity: "error", Message: "active_profile.txt is missing."}
 		}
 
-		return "", Item{Name: "marker_file", Ok: false, Severity: "warn", Message: "Failed to read active_profile.txt."}
+		return "", Item{Name: "marker_file", Ok: false, Severity: "error", Message: "Failed to read active_profile.txt."}
 	}
 
 	trimmed := strings.TrimSpace(string(content))
 	if trimmed == "" {
-		return "", Item{Name: "marker_file", Ok: false, Severity: "warn", Message: "active_profile.txt is empty."}
+		return "", Item{Name: "marker_file", Ok: false, Severity: "error", Message: "active_profile.txt is empty."}
 	}
 
 	return trimmed, Item{Name: "marker_file", Ok: true, Severity: "ok", Message: "active_profile.txt is valid."}

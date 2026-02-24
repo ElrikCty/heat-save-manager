@@ -6,6 +6,10 @@ export function DeleteProfile(arg1) {
   return window['go']['main']['App']['DeleteProfile'](arg1);
 }
 
+export function EnsureProfilesFolder() {
+  return window['go']['main']['App']['EnsureProfilesFolder']();
+}
+
 export function ExportProfileBundle(arg1, arg2) {
   return window['go']['main']['App']['ExportProfileBundle'](arg1, arg2);
 }
@@ -52,6 +56,10 @@ export function SaveCurrentProfile(arg1) {
 
 export function SetSaveGamePath(arg1) {
   return window['go']['main']['App']['SetSaveGamePath'](arg1);
+}
+
+export function CreateMarkerFile(arg1) {
+  return window['go']['main']['App']['CreateMarkerFile'](arg1);
 }
 
 export function SwitchProfile(arg1) {
