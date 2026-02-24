@@ -26,6 +26,14 @@ export function ListProfiles() {
   return window['go']['main']['App']['ListProfiles']();
 }
 
+export function PickExportBundlePath() {
+  return window['go']['main']['App']['PickExportBundlePath']();
+}
+
+export function PickImportBundlePath() {
+  return window['go']['main']['App']['PickImportBundlePath']();
+}
+
 export function PrepareFreshProfile(arg1) {
   return window['go']['main']['App']['PrepareFreshProfile'](arg1);
 }
