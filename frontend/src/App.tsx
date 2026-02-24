@@ -548,8 +548,8 @@ function App() {
                 </section>
 
                 <section className="panel actions-panel">
-                    <h2>Lifecycle Actions</h2>
-                    <label className="field-label" htmlFor="fresh-profile-input">Prepare fresh profile</label>
+                    <h2>Save Setup</h2>
+                    <label className="field-label" htmlFor="fresh-profile-input">Start New Save</label>
                     <div className="field-row">
                         <input
                             id="fresh-profile-input"
@@ -559,11 +559,11 @@ function App() {
                             disabled={isLoading || isModalOpen}
                         />
                         <button className="action-btn" onClick={() => void onPrepareFresh()} disabled={isLoading || isModalOpen || !canPrepareFresh}>
-                            Prepare
+                            Start New Save
                         </button>
                     </div>
 
-                    <label className="field-label" htmlFor="save-profile-input">Save current root to profile</label>
+                    <label className="field-label" htmlFor="save-profile-input">Save Current Progress</label>
                     <div className="field-row">
                         <input
                             id="save-profile-input"
@@ -573,7 +573,7 @@ function App() {
                             disabled={isLoading || isModalOpen}
                         />
                         <button className="action-btn secondary" onClick={() => void onSaveCurrent()} disabled={isLoading || isModalOpen || !canSaveCurrent}>
-                            Save
+                            Save Current Progress
                         </button>
                     </div>
                 </section>
