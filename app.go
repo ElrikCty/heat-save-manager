@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,8 +66,33 @@ func (a *App) SetSaveGamePath(saveGamePath string) error {
 		return errors.New("savegame path is required")
 	}
 
+	if !filepath.IsAbs(trimmed) {
+		return errors.New("savegame path must be absolute")
+	}
+
+	info, err := os.Stat(trimmed)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return errors.New("savegame path does not exist")
+		}
+		return fmt.Errorf("read savegame path: %w", err)
+	}
+
+	if !info.IsDir() {
+		return errors.New("savegame path must be a directory")
+	}
+
+	if !strings.EqualFold(filepath.Base(trimmed), "SaveGame") {
+		return errors.New("path must point to the SaveGame folder")
+	}
+
+	profilesPath := filepath.Join(trimmed, "Profiles")
+	if err := os.MkdirAll(profilesPath, 0o755); err != nil {
+		return fmt.Errorf("ensure Profiles folder: %w", err)
+	}
+
 	a.saveGamePath = trimmed
-	a.profilesPath = filepath.Join(trimmed, "Profiles")
+	a.profilesPath = profilesPath
 
 	return nil
 }

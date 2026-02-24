@@ -8,6 +8,7 @@ import {
     PrepareFreshProfile,
     RenameProfile,
     SaveCurrentProfile,
+    SetSaveGamePath,
     SwitchProfile,
 } from '../wailsjs/go/main/App';
 
@@ -17,6 +18,7 @@ type Profile = {
 
 function App() {
     const [saveGamePath, setSaveGamePath] = useState('');
+    const [saveGamePathInput, setSaveGamePathInput] = useState('');
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [activeProfile, setActiveProfile] = useState('');
     const [freshProfileName, setFreshProfileName] = useState('');
@@ -35,6 +37,7 @@ function App() {
             setIsLoading(true);
             const [paths, profileItems] = await Promise.all([GetPaths(), ListProfiles()]);
             setSaveGamePath(paths.saveGamePath);
+            setSaveGamePathInput(paths.saveGamePath);
             setProfiles(profileItems);
 
             try {
@@ -47,6 +50,32 @@ function App() {
             setStatus('Ready');
         } catch (error) {
             setStatus(`Failed to load profiles: ${String(error)}`);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    async function onApplyPath() {
+        const trimmed = saveGamePathInput.trim();
+        if (!trimmed) {
+            setStatus('SaveGame path cannot be empty.');
+            return;
+        }
+
+        const normalized = trimmed.replace(/[\\/]+$/, '');
+        if (!/[\\/]SaveGame$/i.test(normalized)) {
+            setStatus('Path must point directly to the SaveGame folder.');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            setStatus('Applying SaveGame path...');
+            await SetSaveGamePath(trimmed);
+            await loadData();
+            setStatus('SaveGame path updated.');
+        } catch (error) {
+            setStatus(`Path update failed: ${String(error)}`);
         } finally {
             setIsLoading(false);
         }
@@ -160,6 +189,18 @@ function App() {
                 <section className="panel metadata-panel">
                     <h2>SaveGame Path</h2>
                     <p className="path">{saveGamePath || 'Not set'}</p>
+                    <div className="field-row">
+                        <input
+                            id="savegame-path-input"
+                            value={saveGamePathInput}
+                            onChange={(event) => setSaveGamePathInput(event.target.value)}
+                            placeholder="C:\\Users\\<you>\\Documents\\Need for speed heat\\SaveGame"
+                            disabled={isLoading}
+                        />
+                        <button className="action-btn secondary" onClick={() => void onApplyPath()} disabled={isLoading}>
+                            Apply Path
+                        </button>
+                    </div>
                     <button className="refresh-btn" onClick={() => void loadData()} disabled={isLoading}>
                         {isLoading ? 'Refreshing...' : 'Refresh'}
                     </button>
