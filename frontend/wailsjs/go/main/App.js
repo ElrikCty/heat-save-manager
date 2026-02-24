@@ -26,6 +26,10 @@ export function RenameProfile(arg1, arg2) {
   return window['go']['main']['App']['RenameProfile'](arg1, arg2);
 }
 
+export function RunHealthCheck() {
+  return window['go']['main']['App']['RunHealthCheck']();
+}
+
 export function SaveCurrentProfile(arg1) {
   return window['go']['main']['App']['SaveCurrentProfile'](arg1);
 }
