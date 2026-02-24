@@ -11,6 +11,7 @@ import (
 	"heat-save-manager/internal/config"
 	"heat-save-manager/internal/discovery"
 	"heat-save-manager/internal/fsops"
+	"heat-save-manager/internal/health"
 	"heat-save-manager/internal/lifecycle"
 	"heat-save-manager/internal/marker"
 	"heat-save-manager/internal/profiles"
@@ -134,6 +135,10 @@ func (a *App) RenameProfile(oldName string, newName string) error {
 
 func (a *App) DeleteProfile(profileName string) error {
 	return a.newLifecycleService().DeleteProfile(profileName)
+}
+
+func (a *App) RunHealthCheck() health.Report {
+	return health.NewService(a.saveGamePath, a.profilesPath).Run()
 }
 
 func (a *App) newLifecycleService() *lifecycle.Service {
