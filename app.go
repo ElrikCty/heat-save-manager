@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"heat-save-manager/internal/bundle"
 	"heat-save-manager/internal/config"
 	"heat-save-manager/internal/discovery"
@@ -148,6 +149,33 @@ func (a *App) ExportProfileBundle(profileName string, bundlePath string) error {
 
 func (a *App) ImportProfileBundle(profileName string, bundlePath string) error {
 	return bundle.NewService(a.profilesPath).ImportProfile(profileName, bundlePath)
+}
+
+func (a *App) PickExportBundlePath() (string, error) {
+	if a.ctx == nil {
+		return "", errors.New("app context is not ready")
+	}
+
+	return runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "Export Profile Bundle",
+		DefaultFilename: "profile-bundle.zip",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Zip Archive (*.zip)", Pattern: "*.zip"},
+		},
+	})
+}
+
+func (a *App) PickImportBundlePath() (string, error) {
+	if a.ctx == nil {
+		return "", errors.New("app context is not ready")
+	}
+
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Import Profile Bundle",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Zip Archive (*.zip)", Pattern: "*.zip"},
+		},
+	})
 }
 
 func (a *App) newLifecycleService() *lifecycle.Service {
