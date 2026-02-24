@@ -30,3 +30,10 @@ Switch between save profiles safely from a desktop UI, with backup and rollback 
 
 - Run app in development mode: `wails dev`
 - Build distributable app: `wails build`
+- Validate frontend changes: `npm run build --prefix frontend`
+- Validate backend changes: `go test ./...`
+
+### Repository Hygiene
+
+- Line endings are normalized with `.gitattributes` and `.editorconfig` to reduce CRLF/LF-only diffs.
+- `wails build` may regenerate files under `frontend/wailsjs/`; commit those changes only when the generated API surface actually changed.
