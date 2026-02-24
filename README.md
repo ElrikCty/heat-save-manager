@@ -37,3 +37,4 @@ Switch between save profiles safely from a desktop UI, with backup and rollback 
 
 - Line endings are normalized with `.gitattributes` and `.editorconfig` to reduce CRLF/LF-only diffs.
 - `wails build` may regenerate files under `frontend/wailsjs/`; commit those changes only when the generated API surface actually changed.
+- See `CONTRIBUTING.md` for PR checklist and commit scope guidance.
