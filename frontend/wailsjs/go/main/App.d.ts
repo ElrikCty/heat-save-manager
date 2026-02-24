@@ -16,6 +16,10 @@ export function ImportProfileBundle(arg1:string,arg2:string):Promise<void>;
 
 export function ListProfiles():Promise<Array<main.ProfileItem>>;
 
+export function PickExportBundlePath():Promise<string>;
+
+export function PickImportBundlePath():Promise<string>;
+
 export function PrepareFreshProfile(arg1:string):Promise<void>;
 
 export function RenameProfile(arg1:string,arg2:string):Promise<void>;

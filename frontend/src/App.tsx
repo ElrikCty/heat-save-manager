@@ -7,6 +7,8 @@ import {
     GetPaths,
     ImportProfileBundle,
     ListProfiles,
+    PickExportBundlePath,
+    PickImportBundlePath,
     PrepareFreshProfile,
     RenameProfile,
     SaveCurrentProfile,
@@ -328,6 +330,32 @@ function App() {
         }
     }
 
+    async function onPickExportBundlePath() {
+        try {
+            const selected = await PickExportBundlePath();
+            if (selected) {
+                setExportBundlePath(selected);
+            }
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Failed to open save dialog');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        }
+    }
+
+    async function onPickImportBundlePath() {
+        try {
+            const selected = await PickImportBundlePath();
+            if (selected) {
+                setImportBundlePath(selected);
+            }
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Failed to open file picker');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        }
+    }
+
     function openRenameModal(profileName: string) {
         setRenameTarget(profileName);
         setRenameValue(profileName);
@@ -578,6 +606,9 @@ function App() {
                             placeholder="C:\\Path\\to\\profile.zip"
                             disabled={isLoading || isModalOpen}
                         />
+                        <button className="action-btn secondary" onClick={() => void onPickExportBundlePath()} disabled={isLoading || isModalOpen}>
+                            Browse...
+                        </button>
                     </div>
                     <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen}>
                         Export Bundle
@@ -599,6 +630,9 @@ function App() {
                             placeholder="C:\\Path\\to\\profile.zip"
                             disabled={isLoading || isModalOpen}
                         />
+                        <button className="action-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading || isModalOpen}>
+                            Browse...
+                        </button>
                     </div>
                     <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen}>
                         Import Bundle
