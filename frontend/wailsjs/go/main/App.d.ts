@@ -6,9 +6,13 @@ import {switcher} from '../models';
 
 export function DeleteProfile(arg1:string):Promise<void>;
 
+export function ExportProfileBundle(arg1:string,arg2:string):Promise<void>;
+
 export function GetActiveProfile():Promise<string>;
 
 export function GetPaths():Promise<main.AppPaths>;
+
+export function ImportProfileBundle(arg1:string,arg2:string):Promise<void>;
 
 export function ListProfiles():Promise<Array<main.ProfileItem>>;
 
