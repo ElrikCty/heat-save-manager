@@ -141,11 +141,18 @@ function App() {
 
     const isModalOpen = renameTarget !== null || deleteTarget !== null;
 
-    const statusTone = status.startsWith('Failed') || status.startsWith('Switch failed')
+    const loweredStatus = status.toLowerCase();
+    const statusTone = loweredStatus.includes('failed') || loweredStatus.includes('invalid') || loweredStatus.includes('cannot')
         ? 'danger'
         : isLoading
             ? 'loading'
             : 'ok';
+
+    const canApplyPath = saveGamePathInput.trim() !== '';
+    const canPrepareFresh = freshProfileName.trim() !== '';
+    const canSaveCurrent = saveProfileName.trim() !== '' || activeProfile.trim() !== '';
+    const canExportBundle = exportProfileName.trim() !== '' && exportBundlePath.trim() !== '';
+    const canImportBundle = importProfileName.trim() !== '' && importBundlePath.trim() !== '';
 
     async function loadData() {
         try {
@@ -476,7 +483,7 @@ function App() {
                             placeholder="C:\\Users\\<you>\\Documents\\Need for speed heat\\SaveGame"
                             disabled={isLoading || isModalOpen}
                         />
-                        <button className="action-btn secondary" onClick={() => void onApplyPath()} disabled={isLoading || isModalOpen}>
+                        <button className="action-btn secondary" onClick={() => void onApplyPath()} disabled={isLoading || isModalOpen || !canApplyPath}>
                             Apply Path
                         </button>
                     </div>
@@ -497,7 +504,7 @@ function App() {
                             placeholder="New profile name"
                             disabled={isLoading || isModalOpen}
                         />
-                        <button className="action-btn" onClick={() => void onPrepareFresh()} disabled={isLoading || isModalOpen}>
+                        <button className="action-btn" onClick={() => void onPrepareFresh()} disabled={isLoading || isModalOpen || !canPrepareFresh}>
                             Prepare
                         </button>
                     </div>
@@ -511,7 +518,7 @@ function App() {
                             placeholder="Leave blank to use active"
                             disabled={isLoading || isModalOpen}
                         />
-                        <button className="action-btn secondary" onClick={() => void onSaveCurrent()} disabled={isLoading || isModalOpen}>
+                        <button className="action-btn secondary" onClick={() => void onSaveCurrent()} disabled={isLoading || isModalOpen || !canSaveCurrent}>
                             Save
                         </button>
                     </div>
@@ -610,7 +617,7 @@ function App() {
                             Browse...
                         </button>
                     </div>
-                    <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen}>
+                    <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen || !canExportBundle}>
                         Export Bundle
                     </button>
 
@@ -634,7 +641,7 @@ function App() {
                             Browse...
                         </button>
                     </div>
-                    <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen}>
+                    <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen || !canImportBundle}>
                         Import Bundle
                     </button>
                 </section>
