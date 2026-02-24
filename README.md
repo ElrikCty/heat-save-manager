@@ -20,6 +20,12 @@ Switch between save profiles safely from a desktop UI, with backup and rollback 
 - Switch profile with prechecks, backup, and rollback on failure
 - Create, rename, and delete profiles (active profile deletion blocked)
 
+## Settings
+
+- Custom `SaveGame` path is persisted between launches
+- Settings file location: `%AppData%/HeatSaveManager/config.json`
+- Manual path must point directly to the `SaveGame` directory
+
 ## Development
 
 - Run app in development mode: `wails dev`
