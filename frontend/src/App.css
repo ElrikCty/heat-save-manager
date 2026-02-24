@@ -163,6 +163,12 @@
     cursor: not-allowed;
 }
 
+.field-hint {
+    margin: 0.35rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
 .profile-card {
     display: flex;
     justify-content: space-between;

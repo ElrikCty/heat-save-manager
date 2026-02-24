@@ -201,6 +201,7 @@ function App() {
                             Apply Path
                         </button>
                     </div>
+                    <p className="field-hint">Path must point directly to the `SaveGame` folder.</p>
                     <button className="refresh-btn" onClick={() => void loadData()} disabled={isLoading}>
                         {isLoading ? 'Refreshing...' : 'Refresh'}
                     </button>
