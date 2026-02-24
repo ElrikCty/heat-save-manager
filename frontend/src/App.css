@@ -234,6 +234,55 @@
     font-size: 0.8rem;
 }
 
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(7, 12, 19, 0.74);
+    z-index: 20;
+}
+
+.modal-card {
+    width: min(420px, 100%);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: linear-gradient(160deg, #131d29 0%, #1b2736 100%);
+    padding: 1rem;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+}
+
+.modal-card h3 {
+    margin: 0;
+}
+
+.modal-card p {
+    margin: 0.5rem 0 0.85rem;
+    color: var(--text-muted);
+}
+
+.modal-card input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(162, 181, 200, 0.25);
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+}
+
+.modal-card.danger {
+    border-color: rgba(255, 142, 142, 0.35);
+}
+
+.modal-actions {
+    margin-top: 0.85rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
 @media (max-width: 640px) {
     .app-shell {
         padding-top: 1.5rem;
