@@ -109,6 +109,7 @@
 
 .refresh-btn {
     width: 100%;
+    margin-top: 0.65rem;
     padding: 0.7rem;
     color: #281b13;
     background: linear-gradient(135deg, var(--accent), var(--accent-soft));
