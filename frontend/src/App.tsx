@@ -183,6 +183,17 @@ function App() {
         setDeleteTarget(null);
     }
 
+    function closeActiveModal() {
+        if (renameTarget) {
+            closeRenameModal();
+            return;
+        }
+
+        if (deleteTarget) {
+            closeDeleteModal();
+        }
+    }
+
     async function confirmDeleteProfile() {
         if (!deleteTarget) {
             return;
@@ -205,6 +216,22 @@ function App() {
     useEffect(() => {
         void loadData();
     }, []);
+
+    useEffect(() => {
+        if (!isModalOpen) {
+            return;
+        }
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && !isLoading) {
+                event.preventDefault();
+                closeActiveModal();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isModalOpen, isLoading, renameTarget, deleteTarget]);
 
     return (
         <div className="app-shell">
@@ -292,6 +319,7 @@ function App() {
                                             className="switch-btn secondary"
                                             onClick={() => openRenameModal(profile.name)}
                                             disabled={isLoading || isModalOpen}
+                                            aria-label={`Rename profile ${profile.name}`}
                                         >
                                             Rename
                                         </button>
@@ -299,6 +327,7 @@ function App() {
                                             className="switch-btn danger"
                                             onClick={() => openDeleteModal(profile.name)}
                                             disabled={isLoading || isActive || isModalOpen}
+                                            aria-label={`Delete profile ${profile.name}`}
                                         >
                                             Delete
                                         </button>
@@ -314,15 +343,21 @@ function App() {
             </footer>
 
             {renameTarget && (
-                <div className="modal-overlay" role="dialog" aria-modal="true">
-                    <div className="modal-card">
-                        <h3>Rename Profile</h3>
-                        <p>Choose a new name for <strong>{renameTarget}</strong>.</p>
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="rename-modal-title" aria-describedby="rename-modal-description">
+                    <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+                        <h3 id="rename-modal-title">Rename Profile</h3>
+                        <p id="rename-modal-description">Choose a new name for <strong>{renameTarget}</strong>.</p>
                         <input
                             value={renameValue}
                             onChange={(event) => setRenameValue(event.target.value)}
                             disabled={isLoading}
                             autoFocus
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    void confirmRenameProfile();
+                                }
+                            }}
                         />
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeRenameModal} disabled={isLoading}>
@@ -337,10 +372,10 @@ function App() {
             )}
 
             {deleteTarget && (
-                <div className="modal-overlay" role="dialog" aria-modal="true">
-                    <div className="modal-card danger">
-                        <h3>Delete Profile</h3>
-                        <p>Delete <strong>{deleteTarget}</strong>? This action cannot be undone.</p>
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title" aria-describedby="delete-modal-description">
+                    <div className="modal-card danger" onClick={(event) => event.stopPropagation()}>
+                        <h3 id="delete-modal-title">Delete Profile</h3>
+                        <p id="delete-modal-description">Delete <strong>{deleteTarget}</strong>? This action cannot be undone.</p>
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeDeleteModal} disabled={isLoading}>
                                 Cancel
