@@ -10,10 +10,24 @@ import {
     SaveCurrentProfile,
     SetSaveGamePath,
     SwitchProfile,
+    RunHealthCheck,
 } from '../wailsjs/go/main/App';
 
 type Profile = {
     name: string;
+};
+
+type HealthItem = {
+    name: string;
+    ok: boolean;
+    severity: string;
+    message: string;
+};
+
+type HealthReport = {
+    ready: boolean;
+    checkedAt: string;
+    items: HealthItem[];
 };
 
 type ErrorFeedback = {
@@ -97,6 +111,7 @@ function App() {
     const [saveProfileName, setSaveProfileName] = useState('');
     const [status, setStatus] = useState('Loading profiles...');
     const [recoveryHint, setRecoveryHint] = useState('');
+    const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [renameTarget, setRenameTarget] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
@@ -113,10 +128,11 @@ function App() {
     async function loadData() {
         try {
             setIsLoading(true);
-            const [paths, profileItems] = await Promise.all([GetPaths(), ListProfiles()]);
+            const [paths, profileItems, health] = await Promise.all([GetPaths(), ListProfiles(), RunHealthCheck()]);
             setSaveGamePath(paths.saveGamePath);
             setSaveGamePathInput(paths.saveGamePath);
             setProfiles(profileItems);
+            setHealthReport(health);
 
             try {
                 const active = await GetActiveProfile();
@@ -129,6 +145,23 @@ function App() {
             setRecoveryHint('');
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Failed to load profiles');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    async function onRunHealthCheck() {
+        try {
+            setIsLoading(true);
+            setStatus('Running diagnostics...');
+            setRecoveryHint('');
+            const report = await RunHealthCheck();
+            setHealthReport(report);
+            setStatus(report.ready ? 'Diagnostics complete: setup looks ready.' : 'Diagnostics complete: action needed.');
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Diagnostics failed');
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -431,6 +464,32 @@ function App() {
                             );
                         })}
                     </div>
+                </section>
+
+                <section className="panel diagnostics-panel">
+                    <h2>Diagnostics</h2>
+                    <div className="diagnostics-summary">
+                        <p>
+                            Status:{' '}
+                            <span className={healthReport ? (healthReport.ready ? 'diag-ready' : 'diag-attention') : 'diag-pending'}>
+                                {healthReport ? (healthReport.ready ? 'Ready' : 'Needs attention') : 'Not run yet'}
+                            </span>
+                        </p>
+                        <p>Last run: {healthReport?.checkedAt ? new Date(healthReport.checkedAt).toLocaleString() : 'Not run yet'}</p>
+                    </div>
+                    <button className="refresh-btn" onClick={() => void onRunHealthCheck()} disabled={isLoading || isModalOpen}>
+                        {isLoading ? 'Running...' : 'Run Diagnostics'}
+                    </button>
+                    {healthReport && (
+                        <ul className="health-list">
+                            {healthReport.items.map((item) => (
+                                <li key={item.name} className={`health-item ${item.severity}`}>
+                                    <strong>{item.name.replaceAll('_', ' ')}</strong>
+                                    <span>{item.message}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </section>
             </main>
             <footer className="footnote">
