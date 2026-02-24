@@ -56,6 +56,12 @@
     color: #ff8e8e;
 }
 
+.status-hint {
+    margin: 0.4rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.86rem;
+}
+
 .dashboard {
     max-width: 980px;
     margin: 0 auto;
