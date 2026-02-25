@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {AlertTriangle, CheckCircle2, CircleX, FileText, Folder, FolderOpen, HardDrive, RefreshCw, Zap} from 'lucide-react';
+import {AlertTriangle, ArrowRightLeft, CheckCircle2, CircleX, Edit3, FileText, Folder, FolderOpen, HardDrive, RefreshCw, Trash2, Zap} from 'lucide-react';
 import './App.css';
 import {
     CreateMarkerFile,
@@ -784,28 +784,34 @@ function App() {
                     )}
                 </section>
 
-                <section className="panel primary-panel">
+                <div className="primary-stack">
+                <section className="panel profile-section-card">
                     <div className="panel-block">
                         <div className="panel-header-row">
                             <h2>Profiles</h2>
-                            <span className="field-hint">Active: {activeProfile || 'None selected'}</span>
+                            <span className="field-hint">Active: <strong>{activeProfile || 'None selected'}</strong></span>
                         </div>
 
                         {profiles.length > 0 ? (
-                            <div className="profile-picker-row">
-                                <select
-                                    value={selectedProfileName}
-                                    onChange={(event) => setSelectedProfileName(event.target.value)}
-                                    disabled={isLoading || isModalOpen}
-                                    aria-label="Select profile"
-                                >
-                                    {profiles.map((profile) => (
-                                        <option key={profile.name} value={profile.name}>
-                                            {profile.name}{profile.name === activeProfile ? ' (active)' : ''}
-                                        </option>
-                                    ))}
-                                </select>
+                            <div className="profile-toolbar">
+                                <div className="profile-select-wrap">
+                                    <select
+                                        className={selectedProfileName === activeProfile ? 'has-active-tag' : ''}
+                                        value={selectedProfileName}
+                                        onChange={(event) => setSelectedProfileName(event.target.value)}
+                                        disabled={isLoading || isModalOpen}
+                                        aria-label="Select profile"
+                                    >
+                                        {profiles.map((profile) => (
+                                            <option key={profile.name} value={profile.name}>
+                                                {profile.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {selectedProfileName === activeProfile && <span className="profile-active-tag">ACTIVE</span>}
+                                </div>
                                 <button className="switch-btn" onClick={() => void onSwitchSelectedProfile()} disabled={isLoading || isModalOpen || !canSwitchSelected}>
+                                    <ArrowRightLeft size={13} strokeWidth={2.1} />
                                     Switch
                                 </button>
                                 <button
@@ -814,6 +820,7 @@ function App() {
                                     disabled={isLoading || isModalOpen || !selectedProfileName}
                                     aria-label="Rename selected profile"
                                 >
+                                    <Edit3 size={13} strokeWidth={2.1} />
                                     Rename
                                 </button>
                                 <button
@@ -822,6 +829,7 @@ function App() {
                                     disabled={isLoading || isModalOpen || !selectedProfileName || selectedProfileName === activeProfile}
                                     aria-label="Delete selected profile"
                                 >
+                                    <Trash2 size={13} strokeWidth={2.1} />
                                     Delete
                                 </button>
                             </div>
@@ -832,6 +840,10 @@ function App() {
                             </div>
                         )}
                     </div>
+
+                </section>
+
+                <section className="panel primary-panel">
 
                     <div className="panel-block" ref={saveActionsRef}>
                         <h2>Save Actions</h2>
@@ -1025,6 +1037,7 @@ function App() {
                         )}
                     </div>
                 </section>
+                </div>
             </main>
             <footer className="footnote">
                 <p>Marker file: active_profile.txt</p>
