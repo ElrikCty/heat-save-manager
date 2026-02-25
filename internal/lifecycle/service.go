@@ -60,11 +60,15 @@ func (s *Service) PrepareFreshProfile(profileName string) error {
 		return err
 	}
 
-	if err := s.ops.RemoveDir(filepath.Join(s.saveGamePath, savegameDirName)); err != nil {
+	if err := s.SaveCurrentProfile(name); err != nil {
 		return err
 	}
 
-	if err := s.ops.RemoveDir(filepath.Join(s.saveGamePath, wrapsDirName)); err != nil {
+	if err := clearDirContents(filepath.Join(s.saveGamePath, savegameDirName)); err != nil {
+		return err
+	}
+
+	if err := clearDirContents(filepath.Join(s.saveGamePath, wrapsDirName)); err != nil {
 		return err
 	}
 
@@ -253,6 +257,26 @@ func ensureDirExists(path string) error {
 
 	if !info.IsDir() {
 		return fmt.Errorf("expected directory: %s", path)
+	}
+
+	return nil
+}
+
+func clearDirContents(path string) error {
+	if err := ensureDirExists(path); err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		entryPath := filepath.Join(path, entry.Name())
+		if err := os.RemoveAll(entryPath); err != nil {
+			return err
+		}
 	}
 
 	return nil
