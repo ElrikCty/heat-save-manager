@@ -110,7 +110,7 @@
     grid-template-columns: 1.05rem minmax(0, 1fr);
     column-gap: 0.55rem;
     row-gap: 0.08rem;
-    align-items: start;
+    align-items: center;
     border-radius: 10px;
     border: 1px solid rgba(162, 181, 200, 0.2);
     padding: 0.5rem 0.65rem;
@@ -129,7 +129,8 @@
     font-weight: 800;
     line-height: 1;
     color: #ffffff;
-    margin-top: 0.08rem;
+    align-self: center;
+    margin-top: 0;
 }
 
 .health-icon.circle {
@@ -143,7 +144,7 @@
     border-right: 0.56rem solid transparent;
     border-bottom: 0.96rem solid rgba(255, 183, 94, 0.98);
     position: relative;
-    margin-top: 0.02rem;
+    margin-top: 0;
 }
 
 .health-icon.triangle::after {

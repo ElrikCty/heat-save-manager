@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import './App.css';
 import {
     CreateMarkerFile,
@@ -158,6 +158,7 @@ function App() {
     const [diagnosticsModal, setDiagnosticsModal] = useState<DiagnosticsQuickAction | null>(null);
     const [isBundleExpanded, setIsBundleExpanded] = useState(false);
     const [selectedProfileName, setSelectedProfileName] = useState('');
+    const saveActionsRef = useRef<HTMLDivElement | null>(null);
 
     const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null;
 
@@ -309,7 +310,7 @@ function App() {
             setRecoveryHint('');
             await SetSaveGamePath(trimmed);
             await loadData();
-            setStatus('SaveGame path updated.');
+            setStatus('SaveGame path updated and refreshed.');
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Path update failed');
             setStatus(feedback.message);
@@ -428,17 +429,22 @@ function App() {
 
         const target = resolvedSaveDestination;
         const requested = saveDestinationMode === 'active' ? '' : target;
+        const shouldAutoSetActive = !activeProfile.trim() && needsMarkerFileFix && profiles.length === 0 && requested !== '';
 
         try {
             setIsLoading(true);
             setStatus(`Saving current root data into ${target}...`);
             setRecoveryHint('');
             await SaveCurrentProfile(requested);
+            if (shouldAutoSetActive) {
+                await CreateMarkerFile(target);
+                setActiveProfile(target);
+            }
             if (saveDestinationProfile === NEW_PROFILE_OPTION) {
                 setSaveDestinationNewName('');
             }
             await loadData();
-            setStatus(`Current root save exported to ${target}.`);
+            setStatus(shouldAutoSetActive ? `Current root save exported to ${target} and set as active profile.` : `Current root save exported to ${target}.`);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Save current failed');
             setStatus(feedback.message);
@@ -585,6 +591,14 @@ function App() {
         setDiagnosticsModal(null);
     }
 
+    function jumpToSaveCurrentSetup() {
+        setSaveDestinationMode('custom');
+        setSaveDestinationProfile(NEW_PROFILE_OPTION);
+        setStatus('Choose a new profile name in Save Current Progress to capture your existing save.');
+        setDiagnosticsModal(null);
+        saveActionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
     function closeActiveModal() {
         if (renameTarget) {
             closeRenameModal();
@@ -704,6 +718,9 @@ function App() {
 
                 <section className="panel primary-panel">
                     <div className="panel-block">
+                        <button className="refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
+                            {isLoading ? 'Refreshing...' : 'Refresh'}
+                        </button>
                         <div className="panel-header-row">
                             <h2>Profiles</h2>
                             <span className="field-hint">Active: {activeProfile || 'None selected'}</span>
@@ -751,7 +768,7 @@ function App() {
                         )}
                     </div>
 
-                    <div className="panel-block">
+                    <div className="panel-block" ref={saveActionsRef}>
                         <h2>Save Actions</h2>
                         <div className="setup-group">
                             <label className="field-label" htmlFor="fresh-profile-input">Start New Save</label>
@@ -850,9 +867,6 @@ function App() {
                                 </button>
                             </div>
                             <p className="field-hint">Path must point directly to the `SaveGame` folder.</p>
-                            <button className="refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
-                                {isLoading ? 'Refreshing...' : 'Refresh'}
-                            </button>
                         </div>
                     </div>
 
@@ -974,6 +988,9 @@ function App() {
                                     <>
                                         <p className="modal-note">No profiles exist yet. Create one using Start New Save or Save Current Progress first.</p>
                                         <div className="modal-actions">
+                                            <button className="action-btn" onClick={jumpToSaveCurrentSetup} disabled={isLoading}>
+                                                Save Current Progress first
+                                            </button>
                                             <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
                                                 Close
                                             </button>
