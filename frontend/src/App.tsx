@@ -934,8 +934,11 @@ function App() {
 
                 <section className="panel save-setup-panel">
                     <h2>Save Setup</h2>
-                    <div className="setup-group">
-                        <label className="field-label" htmlFor="savegame-path-input">SaveGame Path</label>
+                    <div className="setup-group save-setup-inner-card">
+                        <label className="field-label savegame-path-label" htmlFor="savegame-path-input">
+                            <FolderOpen size={13} strokeWidth={2} />
+                            <span>SaveGame Path</span>
+                        </label>
                         <p className="path">{saveGamePath ? maskWindowsUserPath(saveGamePath) : 'Not set'}</p>
                         <div className="field-row">
                             <input
@@ -949,7 +952,7 @@ function App() {
                                 Apply Path
                             </button>
                         </div>
-                        <p className="field-hint">Path must point directly to the `SaveGame` folder.</p>
+                        <p className="field-hint">Path must point directly to the <span className="path-token">SaveGame</span> folder.</p>
                     </div>
                 </section>
 
