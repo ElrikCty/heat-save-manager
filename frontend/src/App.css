@@ -53,6 +53,24 @@
     color: var(--text-main);
 }
 
+.top-refresh-btn {
+    margin: 0.25rem 0 0.55rem;
+    align-self: flex-start;
+    border: 1px solid rgba(162, 181, 200, 0.35);
+    border-radius: 999px;
+    padding: 0.35rem 0.72rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+}
+
+.top-refresh-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 .status.ok {
     color: var(--success);
 }
@@ -110,7 +128,7 @@
     grid-template-columns: 1.05rem minmax(0, 1fr);
     column-gap: 0.55rem;
     row-gap: 0.08rem;
-    align-items: start;
+    align-items: center;
     border-radius: 10px;
     border: 1px solid rgba(162, 181, 200, 0.2);
     padding: 0.5rem 0.65rem;
@@ -129,7 +147,8 @@
     font-weight: 800;
     line-height: 1;
     color: #ffffff;
-    margin-top: 0.08rem;
+    align-self: center;
+    margin-top: 0;
 }
 
 .health-icon.circle {
@@ -143,7 +162,7 @@
     border-right: 0.56rem solid transparent;
     border-bottom: 0.96rem solid rgba(255, 183, 94, 0.98);
     position: relative;
-    margin-top: 0.02rem;
+    margin-top: 0;
 }
 
 .health-icon.triangle::after {
@@ -199,6 +218,30 @@
 .diag-actions h3 {
     margin: 0;
     font-size: 0.9rem;
+}
+
+.diag-callout {
+    margin: 0;
+    color: #ffd08b;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.action-btn.attention {
+    box-shadow: 0 0 0 0 rgba(255, 208, 139, 0.55);
+    animation: pulse-attention 1.65s ease-out infinite;
+}
+
+@keyframes pulse-attention {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 208, 139, 0.55);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(255, 208, 139, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 208, 139, 0);
+    }
 }
 
 .dashboard {
@@ -441,6 +484,11 @@ select option {
     opacity: 0.55;
 }
 
+.disabled-option {
+    color: rgba(191, 205, 220, 0.68);
+    text-decoration: line-through;
+}
+
 .save-destination-grid {
     display: grid;
     gap: 0.6rem;
@@ -471,7 +519,16 @@ select option {
 }
 
 .bundle-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.import-row {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.import-row .action-btn {
+    justify-self: start;
+    min-width: 120px;
 }
 
 .field-row input {
@@ -495,6 +552,17 @@ select option {
 
 .field-row input::placeholder {
     color: var(--text-muted);
+}
+
+.field-row input:focus,
+.field-row select:focus,
+.save-destination-grid input:focus,
+.save-destination-grid select:focus,
+.modal-card input:focus,
+.modal-card select:focus {
+    outline: none;
+    border-color: rgba(255, 168, 103, 0.8);
+    box-shadow: 0 0 0 2px rgba(255, 168, 103, 0.22);
 }
 
 .field-row input:disabled,

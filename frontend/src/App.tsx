@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import './App.css';
 import {
     CreateMarkerFile,
@@ -9,7 +9,6 @@ import {
     GetPaths,
     ImportProfileBundle,
     ListProfiles,
-    PickExportBundlePath,
     PickImportBundlePath,
     PrepareFreshProfile,
     RenameProfile,
@@ -41,7 +40,7 @@ type ErrorFeedback = {
     hint: string;
 };
 
-type DiagnosticsQuickAction = 'profiles' | 'marker';
+type DiagnosticsQuickAction = 'profiles' | 'marker' | 'firstSave';
 
 const NEW_PROFILE_OPTION = '__new__';
 
@@ -134,6 +133,12 @@ function maskWindowsUserPath(path: string): string {
     return path.replace(/([\\/]Users[\\/])[^\\/]+/i, '$1<user>');
 }
 
+function buildExportBundlePath(saveGamePath: string, profileName: string): string {
+    const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 13);
+    const safe = profileName.replace(/[^a-zA-Z0-9-_]/g, '_');
+    return `${saveGamePath}\\Exports\\${safe}-${stamp}.zip`;
+}
+
 function App() {
     const [saveGamePath, setSaveGamePath] = useState('');
     const [saveGamePathInput, setSaveGamePathInput] = useState('');
@@ -144,8 +149,8 @@ function App() {
     const [saveDestinationProfile, setSaveDestinationProfile] = useState('');
     const [saveDestinationNewName, setSaveDestinationNewName] = useState('');
     const [exportProfileName, setExportProfileName] = useState('');
-    const [exportBundlePath, setExportBundlePath] = useState('');
-    const [importProfileName, setImportProfileName] = useState('');
+    const [importTargetProfile, setImportTargetProfile] = useState('');
+    const [importTargetNewName, setImportTargetNewName] = useState('');
     const [importBundlePath, setImportBundlePath] = useState('');
     const [status, setStatus] = useState('Loading profiles...');
     const [recoveryHint, setRecoveryHint] = useState('');
@@ -156,8 +161,11 @@ function App() {
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
     const [markerDialogProfile, setMarkerDialogProfile] = useState('');
     const [diagnosticsModal, setDiagnosticsModal] = useState<DiagnosticsQuickAction | null>(null);
+    const [firstSaveProfileName, setFirstSaveProfileName] = useState('');
     const [isBundleExpanded, setIsBundleExpanded] = useState(false);
     const [selectedProfileName, setSelectedProfileName] = useState('');
+    const saveActionsRef = useRef<HTMLDivElement | null>(null);
+    const importNewProfileRef = useRef<HTMLInputElement | null>(null);
 
     const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null;
 
@@ -170,8 +178,9 @@ function App() {
 
     const canApplyPath = saveGamePathInput.trim() !== '';
     const canPrepareFresh = freshProfileName.trim() !== '';
-    const canExportBundle = exportProfileName.trim() !== '' && exportBundlePath.trim() !== '';
-    const canImportBundle = importProfileName.trim() !== '' && importBundlePath.trim() !== '';
+    const canExportBundle = exportProfileName.trim() !== '';
+    const resolvedImportTarget = importTargetProfile === NEW_PROFILE_OPTION ? importTargetNewName.trim() : importTargetProfile.trim();
+    const canImportBundle = resolvedImportTarget !== '' && importBundlePath.trim() !== '';
     const canSwitchSelected = selectedProfileName.trim() !== '' && selectedProfileName !== activeProfile;
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
     const needsProfilesFolderFix = healthReport?.items.some((item) => item.name === 'profiles_path' && !item.ok) ?? false;
@@ -254,6 +263,26 @@ function App() {
                 return current;
             });
 
+            setExportProfileName((current) => {
+                if (current && profileItems.some((profile) => profile.name === current)) {
+                    return current;
+                }
+
+                return profileItems[0]?.name ?? '';
+            });
+
+            setImportTargetProfile((current) => {
+                if (current === NEW_PROFILE_OPTION) {
+                    return NEW_PROFILE_OPTION;
+                }
+
+                if (current && profileItems.some((profile) => profile.name === current)) {
+                    return current;
+                }
+
+                return profileItems[0]?.name ?? NEW_PROFILE_OPTION;
+            });
+
             setStatus('Ready');
             setRecoveryHint('');
         } catch (error) {
@@ -309,7 +338,7 @@ function App() {
             setRecoveryHint('');
             await SetSaveGamePath(trimmed);
             await loadData();
-            setStatus('SaveGame path updated.');
+            setStatus('SaveGame path updated and refreshed.');
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Path update failed');
             setStatus(feedback.message);
@@ -428,17 +457,22 @@ function App() {
 
         const target = resolvedSaveDestination;
         const requested = saveDestinationMode === 'active' ? '' : target;
+        const shouldAutoSetActive = !activeProfile.trim() && needsMarkerFileFix && profiles.length === 0 && requested !== '';
 
         try {
             setIsLoading(true);
             setStatus(`Saving current root data into ${target}...`);
             setRecoveryHint('');
             await SaveCurrentProfile(requested);
+            if (shouldAutoSetActive) {
+                await CreateMarkerFile(target);
+                setActiveProfile(target);
+            }
             if (saveDestinationProfile === NEW_PROFILE_OPTION) {
                 setSaveDestinationNewName('');
             }
             await loadData();
-            setStatus(`Current root save exported to ${target}.`);
+            setStatus(shouldAutoSetActive ? `Current root save exported to ${target} and set as active profile.` : `Current root save exported to ${target}.`);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Save current failed');
             setStatus(feedback.message);
@@ -450,11 +484,12 @@ function App() {
 
     async function onExportBundle() {
         const profileName = exportProfileName.trim();
-        const bundlePath = exportBundlePath.trim();
-        if (!profileName || !bundlePath) {
-            setStatus('Enter profile name and destination bundle path to export.');
+        if (!profileName) {
+            setStatus('Choose a profile to export first.');
             return;
         }
+
+        const bundlePath = buildExportBundlePath(saveGamePath, profileName);
 
         try {
             setIsLoading(true);
@@ -472,10 +507,15 @@ function App() {
     }
 
     async function onImportBundle() {
-        const profileName = importProfileName.trim();
+        const profileName = resolvedImportTarget;
         const bundlePath = importBundlePath.trim();
-        if (!profileName || !bundlePath) {
-            setStatus('Enter profile name and source bundle path to import.');
+        if (!profileName) {
+            setStatus(importTargetProfile === NEW_PROFILE_OPTION ? 'Enter a new profile name for import.' : 'Choose destination profile first.');
+            return;
+        }
+
+        if (!bundlePath) {
+            setStatus('Browse and choose a .zip bundle to import first.');
             return;
         }
 
@@ -492,19 +532,6 @@ function App() {
             setRecoveryHint(feedback.hint);
         } finally {
             setIsLoading(false);
-        }
-    }
-
-    async function onPickExportBundlePath() {
-        try {
-            const selected = await PickExportBundlePath();
-            if (selected) {
-                setExportBundlePath(selected);
-            }
-        } catch (error) {
-            const feedback = toErrorFeedback(error, 'Failed to open save dialog');
-            setStatus(feedback.message);
-            setRecoveryHint(feedback.hint);
         }
     }
 
@@ -585,6 +612,37 @@ function App() {
         setDiagnosticsModal(null);
     }
 
+    async function onSaveCurrentFromModal() {
+        const profileName = firstSaveProfileName.trim();
+        if (!profileName) {
+            setStatus('Enter a profile name before saving current progress.');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            setStatus(`Saving current root data into ${profileName}...`);
+            setRecoveryHint('');
+            await SaveCurrentProfile(profileName);
+
+            if (!activeProfile.trim() && needsMarkerFileFix && profiles.length === 0) {
+                await CreateMarkerFile(profileName);
+                setActiveProfile(profileName);
+            }
+
+            await loadData();
+            setDiagnosticsModal(null);
+            setFirstSaveProfileName('');
+            setStatus(`Current root save exported to ${profileName} and set as active profile.`);
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Save current failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
     function closeActiveModal() {
         if (renameTarget) {
             closeRenameModal();
@@ -643,12 +701,21 @@ function App() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isModalOpen, isLoading, renameTarget, deleteTarget, diagnosticsModal]);
 
+    useEffect(() => {
+        if (importTargetProfile === NEW_PROFILE_OPTION) {
+            importNewProfileRef.current?.focus();
+        }
+    }, [importTargetProfile]);
+
     return (
         <div className="app-shell">
             <header className="hero">
                 <p className="eyebrow">Need for Speed Heat</p>
                 <h1>Heat Save Manager</h1>
                 <p className="current-profile">Current Profile: <strong>{activeProfile || 'None selected'}</strong></p>
+                <button className="top-refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
+                    ↻ Refresh
+                </button>
                 <p className={`status ${statusTone}`}>{status}</p>
                 {recoveryHint && <p className="status-hint">Tip: {recoveryHint}</p>}
             </header>
@@ -671,13 +738,14 @@ function App() {
                     {(needsProfilesFolderFix || needsMarkerFileFix) && (
                         <div className="diag-actions">
                             <h3>Quick Actions</h3>
+                            <p className="diag-callout">Action required: use a quick action below to continue setup.</p>
                             {needsProfilesFolderFix && (
-                                <button className="action-btn secondary" onClick={() => openDiagnosticsModal('profiles')} disabled={isLoading || isModalOpen}>
+                                <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('profiles')} disabled={isLoading || isModalOpen}>
                                     Create Profiles folder
                                 </button>
                             )}
                             {needsMarkerFileFix && (
-                                <button className="action-btn secondary" onClick={() => openDiagnosticsModal('marker')} disabled={isLoading || isModalOpen}>
+                                <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('marker')} disabled={isLoading || isModalOpen}>
                                     Set active profile
                                 </button>
                             )}
@@ -751,7 +819,7 @@ function App() {
                         )}
                     </div>
 
-                    <div className="panel-block">
+                    <div className="panel-block" ref={saveActionsRef}>
                         <h2>Save Actions</h2>
                         <div className="setup-group">
                             <label className="field-label" htmlFor="fresh-profile-input">Start New Save</label>
@@ -779,7 +847,7 @@ function App() {
                                         onChange={() => setSaveDestinationMode('active')}
                                         disabled={isLoading || isModalOpen || !hasActiveDestination}
                                     />
-                                    <span>Use active ({activeProfile || 'none'})</span>
+                                    <span className={!hasActiveDestination ? 'disabled-option' : ''}>{hasActiveDestination ? `Use active (${activeProfile})` : 'Use active (not available)'}</span>
                                 </label>
                                 <label className="save-mode-option">
                                     <input
@@ -850,9 +918,6 @@ function App() {
                                 </button>
                             </div>
                             <p className="field-hint">Path must point directly to the `SaveGame` folder.</p>
-                            <button className="refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
-                                {isLoading ? 'Refreshing...' : 'Refresh'}
-                            </button>
                         </div>
                     </div>
 
@@ -877,50 +942,66 @@ function App() {
                             <div id="bundle-transfer-content" className="bundle-content">
                                 <label className="field-label" htmlFor="export-profile-input">Export profile to .zip</label>
                                 <div className="field-row bundle-row">
-                                    <input
+                                    <select
                                         id="export-profile-input"
                                         value={exportProfileName}
                                         onChange={(event) => setExportProfileName(event.target.value)}
-                                        placeholder="Profile name to export"
                                         disabled={isLoading || isModalOpen}
-                                    />
-                                    <input
-                                        id="export-bundle-path-input"
-                                        value={exportBundlePath}
-                                        onChange={(event) => setExportBundlePath(event.target.value)}
-                                        placeholder="Destination .zip path"
-                                        disabled={isLoading || isModalOpen}
-                                    />
-                                    <button className="action-btn secondary" onClick={() => void onPickExportBundlePath()} disabled={isLoading || isModalOpen}>
-                                        Browse...
-                                    </button>
+                                    >
+                                        {profiles.length === 0 ? (
+                                            <option value="">No profiles available</option>
+                                        ) : (
+                                            profiles.map((profile) => (
+                                                <option key={profile.name} value={profile.name}>
+                                                    {profile.name}
+                                                </option>
+                                            ))
+                                        )}
+                                    </select>
                                 </div>
-                                <p className="field-hint">Choose where the exported `.zip` will be saved.</p>
+                                {profiles.length === 0 && <p className="field-hint">Create or save a profile first, then export it.</p>}
+                                <p className="field-hint">Bundle will be saved automatically to `SaveGame/Exports`.</p>
                                 <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen || !canExportBundle}>
                                     Export Bundle
                                 </button>
 
                                 <label className="field-label" htmlFor="import-profile-input">Import .zip into profile</label>
-                                <div className="field-row bundle-row">
-                                    <input
+                                <div className="field-row bundle-row import-row">
+                                    <select
                                         id="import-profile-input"
-                                        value={importProfileName}
-                                        onChange={(event) => setImportProfileName(event.target.value)}
-                                        placeholder="Target profile name"
+                                        value={importTargetProfile}
+                                        onChange={(event) => {
+                                            const next = event.target.value;
+                                            setImportTargetProfile(next);
+                                            if (next !== NEW_PROFILE_OPTION) {
+                                                setImportTargetNewName('');
+                                            }
+                                        }}
                                         disabled={isLoading || isModalOpen}
-                                    />
-                                    <input
-                                        id="import-bundle-path-input"
-                                        value={importBundlePath}
-                                        onChange={(event) => setImportBundlePath(event.target.value)}
-                                        placeholder="Source .zip path"
-                                        disabled={isLoading || isModalOpen}
-                                    />
+                                    >
+                                        {profiles.map((profile) => (
+                                            <option key={profile.name} value={profile.name}>
+                                                {profile.name}
+                                            </option>
+                                        ))}
+                                        <option value={NEW_PROFILE_OPTION}>Create new profile...</option>
+                                    </select>
                                     <button className="action-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading || isModalOpen}>
                                         Browse...
                                     </button>
                                 </div>
-                                <p className="field-hint">Select an exported `.zip` file to restore into the target profile.</p>
+                                {importTargetProfile === NEW_PROFILE_OPTION && (
+                                    <div className="field-row">
+                                        <input
+                                            ref={importNewProfileRef}
+                                            value={importTargetNewName}
+                                            onChange={(event) => setImportTargetNewName(event.target.value)}
+                                            placeholder="New profile name"
+                                            disabled={isLoading || isModalOpen}
+                                        />
+                                    </div>
+                                )}
+                                <p className="field-hint">Selected bundle: <strong>{importBundlePath || 'None selected'}</strong></p>
                                 <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen || !canImportBundle}>
                                     Import Bundle
                                 </button>
@@ -951,6 +1032,28 @@ function App() {
                                     </button>
                                 </div>
                             </>
+                        ) : diagnosticsModal === 'firstSave' ? (
+                            <>
+                                <h3 id="diag-modal-title">Save Current Progress First</h3>
+                                <p id="diag-modal-description">
+                                    Create your first profile from the current game state. This will also set it as active.
+                                </p>
+                                <input
+                                    value={firstSaveProfileName}
+                                    onChange={(event) => setFirstSaveProfileName(event.target.value)}
+                                    placeholder="New profile name"
+                                    disabled={isLoading}
+                                    autoFocus
+                                />
+                                <div className="modal-actions">
+                                    <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
+                                        Cancel
+                                    </button>
+                                    <button className="action-btn" onClick={() => void onSaveCurrentFromModal()} disabled={isLoading || !firstSaveProfileName.trim()}>
+                                        Save Current Progress
+                                    </button>
+                                </div>
+                            </>
                         ) : (
                             <>
                                 <h3 id="diag-modal-title">Set Active Profile</h3>
@@ -974,6 +1077,9 @@ function App() {
                                     <>
                                         <p className="modal-note">No profiles exist yet. Create one using Start New Save or Save Current Progress first.</p>
                                         <div className="modal-actions">
+                                            <button className="action-btn" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
+                                                Save Current Progress first
+                                            </button>
                                             <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
                                                 Close
                                             </button>
