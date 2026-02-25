@@ -10,7 +10,7 @@ import (
 	"heat-save-manager/internal/marker"
 )
 
-func TestPrepareFreshProfileRemovesRootDirsAndUpdatesMarker(t *testing.T) {
+func TestPrepareFreshProfileSavesRootIntoProfileAndUpdatesMarker(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -27,15 +27,10 @@ func TestPrepareFreshProfileRemovesRootDirsAndUpdatesMarker(t *testing.T) {
 		t.Fatalf("prepare fresh profile: %v", err)
 	}
 
-	_, saveErr := os.Stat(filepath.Join(saveGamePath, "savegame"))
-	if !os.IsNotExist(saveErr) {
-		t.Fatalf("expected root savegame removed, got %v", saveErr)
-	}
-
-	_, wrapsErr := os.Stat(filepath.Join(saveGamePath, "wraps"))
-	if !os.IsNotExist(wrapsErr) {
-		t.Fatalf("expected root wraps removed, got %v", wrapsErr)
-	}
+	assertFileContent(t, filepath.Join(profilesPath, "fresh-01", "savegame", "slot.sav"), "old-save")
+	assertFileContent(t, filepath.Join(profilesPath, "fresh-01", "wraps", "wrap.txt"), "old-wrap")
+	assertDirEmpty(t, filepath.Join(saveGamePath, "savegame"))
+	assertDirEmpty(t, filepath.Join(saveGamePath, "wraps"))
 
 	active, err := store.ReadActiveProfile()
 	if err != nil {
@@ -44,6 +39,19 @@ func TestPrepareFreshProfileRemovesRootDirsAndUpdatesMarker(t *testing.T) {
 
 	if active != "fresh-01" {
 		t.Fatalf("expected active profile fresh-01, got %q", active)
+	}
+}
+
+func assertDirEmpty(t *testing.T, path string) {
+	t.Helper()
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		t.Fatalf("read dir %s: %v", path, err)
+	}
+
+	if len(entries) != 0 {
+		t.Fatalf("expected dir %s to be empty, got %d entries", path, len(entries))
 	}
 }
 

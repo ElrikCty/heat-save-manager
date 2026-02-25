@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {AlertTriangle, ArrowRightLeft, CheckCircle2, CircleX, Download, Edit3, FileText, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Save, Trash2, Upload, Zap} from 'lucide-react';
+import {AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CircleX, Download, Edit3, FileText, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Save, Trash2, Upload, Zap} from 'lucide-react';
 import './App.css';
 import {
     CreateMarkerFile,
@@ -158,6 +158,7 @@ function getDiagnosticItemIcon(name: string) {
 }
 
 function App() {
+    type ToastKind = 'success' | 'info' | 'error';
     const [saveGamePath, setSaveGamePath] = useState('');
     const [saveGamePathInput, setSaveGamePathInput] = useState('');
     const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -185,9 +186,12 @@ function App() {
     const [isBundleExpanded, setIsBundleExpanded] = useState(false);
     const [selectedProfileName, setSelectedProfileName] = useState('');
     const [toastMessage, setToastMessage] = useState('');
+    const [toastKind, setToastKind] = useState<ToastKind>('success');
     const saveActionsRef = useRef<HTMLDivElement | null>(null);
     const importNewProfileRef = useRef<HTMLInputElement | null>(null);
     const toastTimerRef = useRef<number | null>(null);
+    const lastStatusToastRef = useRef('');
+    const lastRecoveryToastRef = useRef('');
 
     const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen;
 
@@ -196,10 +200,10 @@ function App() {
     const canExportBundle = exportProfileName.trim() !== '';
     const resolvedImportTarget = importTargetProfile === NEW_PROFILE_OPTION ? importTargetNewName.trim() : importTargetProfile.trim();
     const canImportBundle = resolvedImportTarget !== '' && importBundlePath.trim() !== '';
-    const canSwitchSelected = selectedProfileName.trim() !== '' && selectedProfileName !== activeProfile;
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
     const needsProfilesFolderFix = healthReport?.items.some((item) => item.name === 'profiles_path' && !item.ok) ?? false;
     const needsMarkerFileFix = markerHealthItem?.message.toLowerCase().includes('is missing') ?? false;
+    const hasQuickActions = needsProfilesFolderFix || needsMarkerFileFix;
     const hasDiagnosticErrors = healthReport?.items.some((item) => item.severity === 'error') ?? false;
     const hasDiagnosticWarnings = healthReport?.items.some((item) => item.severity === 'warn') ?? false;
     const diagnosticsStatusLabel = !healthReport
@@ -221,9 +225,30 @@ function App() {
     const resolvedSaveDestination = saveDestinationMode === 'active' ? activeProfile.trim() : selectedCustomDestination;
     const canSaveCurrent = resolvedSaveDestination !== '';
 
-    async function loadData() {
+    function showToast(message: string, kind: ToastKind = 'success') {
+        setToastKind(kind);
+        setToastMessage(message);
+    }
+
+    function inferStatusToastKind(message: string): ToastKind {
+        const lower = message.toLowerCase();
+        if (lower.includes('failed') || lower.includes('cannot') || lower.includes('error') || lower.includes('missing') || lower.includes('invalid')) {
+            return 'error';
+        }
+
+        if (lower.endsWith("...") || lower.includes('running')) {
+            return 'info';
+        }
+
+        return 'success';
+    }
+
+    async function loadData(withRefreshToast = false) {
         try {
             setIsLoading(true);
+            if (withRefreshToast) {
+                showToast('Refreshing data...', 'info');
+            }
             const [paths, profileItems, health] = await Promise.all([GetPaths(), ListProfiles(), RunHealthCheck()]);
             setSaveGamePath(paths.saveGamePath);
             setSaveGamePathInput(paths.saveGamePath);
@@ -246,16 +271,12 @@ function App() {
                 setActiveProfile('');
             }
 
-            setSelectedProfileName((current) => {
+            setSelectedProfileName(() => {
                 if (resolvedActive && profileItems.some((profile) => profile.name === resolvedActive)) {
                     return resolvedActive;
                 }
 
-                if (current && profileItems.some((profile) => profile.name === current)) {
-                    return current;
-                }
-
-                return profileItems[0]?.name ?? '';
+                return '';
             });
 
             setSaveDestinationProfile((current) => {
@@ -300,6 +321,9 @@ function App() {
 
             setStatus('Ready');
             setRecoveryHint('');
+            if (withRefreshToast) {
+                showToast('Data refreshed.');
+            }
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Failed to load profiles');
             setStatus(feedback.message);
@@ -319,11 +343,14 @@ function App() {
             const hasErrors = report.items.some((item) => item.severity === 'error');
             const hasWarnings = report.items.some((item) => item.severity === 'warn');
             if (hasErrors) {
-                setStatus('Diagnostics complete: action needed.');
+                setStatus('Ready');
+                showToast('Diagnostics complete: action needed.', 'info');
             } else if (hasWarnings) {
-                setStatus('Diagnostics complete: ready with warnings.');
+                setStatus('Ready');
+                showToast('Diagnostics complete: ready with warnings.', 'info');
             } else {
-                setStatus('Diagnostics complete: setup looks ready.');
+                setStatus('Ready');
+                showToast('Diagnostics complete: setup looks ready.', 'info');
             }
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Diagnostics failed');
@@ -426,15 +453,6 @@ function App() {
         }
     }
 
-    async function onSwitchSelectedProfile() {
-        const profileName = selectedProfileName.trim();
-        if (!profileName || profileName === activeProfile) {
-            return;
-        }
-
-        await onSwitch(profileName);
-    }
-
     async function onPrepareFresh() {
         const name = freshProfileName.trim();
         if (!name) {
@@ -444,15 +462,15 @@ function App() {
 
         try {
             setIsLoading(true);
-            setStatus(`Preparing fresh profile ${name}...`);
+            setStatus(`Creating profile ${name}...`);
             setRecoveryHint('');
             await PrepareFreshProfile(name);
             setFreshProfileName('');
             setActiveProfile(name);
             await loadData();
-            setStatus(`Fresh profile prepared: ${name}. Start the game to generate a new save.`);
+            setStatus(`Profile created from current root save: ${name}. Active profile updated.`);
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Fresh profile prep failed');
+            const feedback = toErrorFeedback(error, 'Create profile failed');
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -487,7 +505,7 @@ function App() {
                 setSaveDestinationNewName('');
             }
             await loadData();
-            setStatus(shouldAutoSetActive ? `Current root save exported to ${target} and set as active profile.` : `Current root save exported to ${target}.`);
+            setStatus(shouldAutoSetActive ? `Saved current progress to ${target} and set it as active.` : `Saved current progress to ${target}.`);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Save current failed');
             setStatus(feedback.message);
@@ -512,7 +530,6 @@ function App() {
             setRecoveryHint('');
             await ExportProfileBundle(profileName, bundlePath);
             setStatus(`Bundle exported: ${bundlePath}`);
-            setToastMessage(`Exported bundle for ${profileName}.`);
             setIsExportModalOpen(false);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Bundle export failed');
@@ -543,7 +560,6 @@ function App() {
             await ImportProfileBundle(profileName, bundlePath);
             await loadData();
             setStatus(`Bundle imported into profile ${profileName}.`);
-            setToastMessage(`Imported bundle into ${profileName}.`);
             setIsImportModalOpen(false);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Bundle import failed');
@@ -668,7 +684,7 @@ function App() {
             await loadData();
             setDiagnosticsModal(null);
             setFirstSaveProfileName('');
-            setStatus(`Current root save exported to ${profileName} and set as active profile.`);
+            setStatus(`Saved current progress to ${profileName} and set it as active.`);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Save current failed');
             setStatus(feedback.message);
@@ -753,6 +769,34 @@ function App() {
     }, [importTargetProfile]);
 
     useEffect(() => {
+        const message = status.trim();
+        if (!message || message.toLowerCase() === 'ready') {
+            return;
+        }
+
+        if (message === lastStatusToastRef.current) {
+            return;
+        }
+
+        lastStatusToastRef.current = message;
+        showToast(message, inferStatusToastKind(message));
+    }, [status]);
+
+    useEffect(() => {
+        const hint = recoveryHint.trim();
+        if (!hint) {
+            return;
+        }
+
+        if (hint === lastRecoveryToastRef.current) {
+            return;
+        }
+
+        lastRecoveryToastRef.current = hint;
+        showToast(`Tip: ${hint}`, 'info');
+    }, [recoveryHint]);
+
+    useEffect(() => {
         if (!toastMessage) {
             return;
         }
@@ -775,19 +819,17 @@ function App() {
     }, [toastMessage]);
 
     return (
-        <div className="app-shell">
+        <div className={`app-shell${hasQuickActions ? ' quick-actions-focus' : ''}`}>
             <header className="hero">
                 <p className="eyebrow"><Zap size={11} strokeWidth={2.3} /> Need for Speed Heat</p>
                 <h1>Heat Save Manager</h1>
                 <div className="hero-actions">
                     <p className="current-profile">Current Profile: <strong>{activeProfile || 'None selected'}</strong></p>
-                    <button className="top-refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
+                    <button className="top-refresh-btn" onClick={() => void loadData(true)} disabled={isLoading || isModalOpen}>
                         <RefreshCw size={13} strokeWidth={2.2} className={isLoading ? 'spin' : ''} /> Refresh
                     </button>
                 </div>
                 <p className={`status ${diagnosticsStatusClass}`}><span className="status-dot" aria-hidden="true" /> {diagnosticsStatusLabel}</p>
-                {status.trim().toLowerCase() !== 'ready' && <p className="status-hint">{status}</p>}
-                {recoveryHint && <p className="status-hint">Tip: {recoveryHint}</p>}
             </header>
 
             <main className="dashboard workspace-layout">
@@ -852,24 +894,33 @@ function App() {
                             <div className="profile-toolbar">
                                 <div className="profile-select-wrap">
                                     <select
-                                        className={selectedProfileName === activeProfile ? 'has-active-tag' : ''}
+                                        className={selectedProfileName && activeProfile && selectedProfileName === activeProfile ? 'has-active-tag' : ''}
                                         value={selectedProfileName}
-                                        onChange={(event) => setSelectedProfileName(event.target.value)}
+                                        onChange={(event) => {
+                                            const next = event.target.value;
+                                            setSelectedProfileName(next);
+                                            if (next && next !== activeProfile) {
+                                                void onSwitch(next);
+                                            }
+                                        }}
                                         disabled={isLoading || isModalOpen}
                                         aria-label="Select profile"
                                     >
+                                        <option value="" disabled>
+                                            {activeProfile ? 'Select profile' : 'No active profile selected'}
+                                        </option>
                                         {profiles.map((profile) => (
                                             <option key={profile.name} value={profile.name}>
                                                 {profile.name}
                                             </option>
                                         ))}
                                     </select>
-                                    {selectedProfileName === activeProfile && <span className="profile-active-tag">ACTIVE</span>}
+                                    {selectedProfileName && activeProfile && selectedProfileName === activeProfile && (
+                                        <span className="profile-active-tag" style={{left: `calc(0.92rem + ${Math.min(selectedProfileName.length+1, 16)}ch)`}}>
+                                            ACTIVE
+                                        </span>
+                                    )}
                                 </div>
-                                <button className="switch-btn" onClick={() => void onSwitchSelectedProfile()} disabled={isLoading || isModalOpen || !canSwitchSelected}>
-                                    <ArrowRightLeft size={13} strokeWidth={2.1} />
-                                    Switch
-                                </button>
                                 <button
                                     className="switch-btn secondary"
                                     onClick={() => openRenameModal(selectedProfileName)}
@@ -1019,13 +1070,13 @@ function App() {
                             <p className="field-hint">Bundle Transfer tools for manually moving profiles between machines or backups.</p>
                         </div>
                         <button
-                            className="switch-btn secondary"
+                            className="switch-btn secondary advanced-toggle-btn"
                             onClick={() => setIsBundleExpanded((open) => !open)}
                             disabled={isLoading || isModalOpen}
                             aria-expanded={isBundleExpanded}
                             aria-controls="bundle-transfer-content"
                         >
-                            {isBundleExpanded ? 'Hide' : 'Show'}
+                            {isBundleExpanded ? (<><span>Hide</span><ChevronUp size={14} strokeWidth={2.2} /></>) : (<><span>Show</span><ChevronDown size={14} strokeWidth={2.2} /></>)}
                         </button>
                     </div>
 
@@ -1065,8 +1116,8 @@ function App() {
             </footer>
 
             {toastMessage && (
-                <div className="toast toast-success" role="status" aria-live="polite">
-                    <CheckCircle2 size={15} strokeWidth={2.2} /> {toastMessage}
+                <div className={`toast ${toastKind === 'info' ? 'toast-info' : toastKind === 'error' ? 'toast-error' : 'toast-success'}`} role="status" aria-live="polite">
+                    {toastKind === 'error' ? <AlertTriangle size={15} strokeWidth={2.2} /> : <CheckCircle2 size={15} strokeWidth={2.2} />} {toastMessage}
                 </div>
             )}
 
@@ -1126,6 +1177,18 @@ function App() {
                                             </button>
                                             <button className="action-btn" onClick={() => void onEnsureProfilesFolder()} disabled={isLoading}>
                                                 Create Profiles folder first
+                                            </button>
+                                        </div>
+                                    </>
+                                ) : !activeProfile.trim() ? (
+                                    <>
+                                        <p className="modal-note">No active profile marker detected. Save current progress first to preserve the current root data and set an active profile.</p>
+                                        <div className="modal-actions">
+                                            <button className="action-btn" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
+                                                Save Current Progress first
+                                            </button>
+                                            <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
+                                                Close
                                             </button>
                                         </div>
                                     </>
