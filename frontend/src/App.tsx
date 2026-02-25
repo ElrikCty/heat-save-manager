@@ -1,4 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
+import {AlertTriangle, ArrowRightLeft, CheckCircle2, CircleX, Download, Edit3, FileText, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Save, Trash2, Upload, Zap} from 'lucide-react';
 import './App.css';
 import {
     CreateMarkerFile,
@@ -139,6 +140,23 @@ function buildExportBundlePath(saveGamePath: string, profileName: string): strin
     return `${saveGamePath}\\Exports\\${safe}-${stamp}.zip`;
 }
 
+function getDiagnosticItemIcon(name: string) {
+    switch (name) {
+    case 'savegame_path':
+        return <HardDrive size={14} strokeWidth={2} />;
+    case 'marker_file':
+        return <FileText size={14} strokeWidth={2} />;
+    case 'active_profile_folder':
+    case 'profiles_path':
+        return <FolderOpen size={14} strokeWidth={2} />;
+    case 'root_savegame_folder':
+    case 'root_wraps_folder':
+        return <Folder size={14} strokeWidth={2} />;
+    default:
+        return <Folder size={14} strokeWidth={2} />;
+    }
+}
+
 function App() {
     const [saveGamePath, setSaveGamePath] = useState('');
     const [saveGamePathInput, setSaveGamePathInput] = useState('');
@@ -161,20 +179,17 @@ function App() {
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
     const [markerDialogProfile, setMarkerDialogProfile] = useState('');
     const [diagnosticsModal, setDiagnosticsModal] = useState<DiagnosticsQuickAction | null>(null);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [firstSaveProfileName, setFirstSaveProfileName] = useState('');
     const [isBundleExpanded, setIsBundleExpanded] = useState(false);
     const [selectedProfileName, setSelectedProfileName] = useState('');
+    const [toastMessage, setToastMessage] = useState('');
     const saveActionsRef = useRef<HTMLDivElement | null>(null);
     const importNewProfileRef = useRef<HTMLInputElement | null>(null);
+    const toastTimerRef = useRef<number | null>(null);
 
-    const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null;
-
-    const loweredStatus = status.toLowerCase();
-    const statusTone = loweredStatus.includes('failed') || loweredStatus.includes('invalid') || loweredStatus.includes('cannot')
-        ? 'danger'
-        : isLoading
-            ? 'loading'
-            : 'ok';
+    const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen;
 
     const canApplyPath = saveGamePathInput.trim() !== '';
     const canPrepareFresh = freshProfileName.trim() !== '';
@@ -497,6 +512,8 @@ function App() {
             setRecoveryHint('');
             await ExportProfileBundle(profileName, bundlePath);
             setStatus(`Bundle exported: ${bundlePath}`);
+            setToastMessage(`Exported bundle for ${profileName}.`);
+            setIsExportModalOpen(false);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Bundle export failed');
             setStatus(feedback.message);
@@ -526,6 +543,8 @@ function App() {
             await ImportProfileBundle(profileName, bundlePath);
             await loadData();
             setStatus(`Bundle imported into profile ${profileName}.`);
+            setToastMessage(`Imported bundle into ${profileName}.`);
+            setIsImportModalOpen(false);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Bundle import failed');
             setStatus(feedback.message);
@@ -612,6 +631,22 @@ function App() {
         setDiagnosticsModal(null);
     }
 
+    function openExportModal() {
+        setIsExportModalOpen(true);
+    }
+
+    function closeExportModal() {
+        setIsExportModalOpen(false);
+    }
+
+    function openImportModal() {
+        setIsImportModalOpen(true);
+    }
+
+    function closeImportModal() {
+        setIsImportModalOpen(false);
+    }
+
     async function onSaveCurrentFromModal() {
         const profileName = firstSaveProfileName.trim();
         if (!profileName) {
@@ -656,6 +691,16 @@ function App() {
 
         if (diagnosticsModal) {
             closeDiagnosticsModal();
+            return;
+        }
+
+        if (isExportModalOpen) {
+            closeExportModal();
+            return;
+        }
+
+        if (isImportModalOpen) {
+            closeImportModal();
         }
     }
 
@@ -699,7 +744,7 @@ function App() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isModalOpen, isLoading, renameTarget, deleteTarget, diagnosticsModal]);
+    }, [isModalOpen, isLoading, renameTarget, deleteTarget, diagnosticsModal, isExportModalOpen, isImportModalOpen]);
 
     useEffect(() => {
         if (importTargetProfile === NEW_PROFILE_OPTION) {
@@ -707,33 +752,59 @@ function App() {
         }
     }, [importTargetProfile]);
 
+    useEffect(() => {
+        if (!toastMessage) {
+            return;
+        }
+
+        if (toastTimerRef.current !== null) {
+            window.clearTimeout(toastTimerRef.current);
+        }
+
+        toastTimerRef.current = window.setTimeout(() => {
+            setToastMessage('');
+            toastTimerRef.current = null;
+        }, 3200);
+
+        return () => {
+            if (toastTimerRef.current !== null) {
+                window.clearTimeout(toastTimerRef.current);
+                toastTimerRef.current = null;
+            }
+        };
+    }, [toastMessage]);
+
     return (
         <div className="app-shell">
             <header className="hero">
-                <p className="eyebrow">Need for Speed Heat</p>
+                <p className="eyebrow"><Zap size={11} strokeWidth={2.3} /> Need for Speed Heat</p>
                 <h1>Heat Save Manager</h1>
-                <p className="current-profile">Current Profile: <strong>{activeProfile || 'None selected'}</strong></p>
-                <button className="top-refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
-                    ↻ Refresh
-                </button>
-                <p className={`status ${statusTone}`}>{status}</p>
+                <div className="hero-actions">
+                    <p className="current-profile">Current Profile: <strong>{activeProfile || 'None selected'}</strong></p>
+                    <button className="top-refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
+                        <RefreshCw size={13} strokeWidth={2.2} className={isLoading ? 'spin' : ''} /> Refresh
+                    </button>
+                </div>
+                <p className={`status ${diagnosticsStatusClass}`}><span className="status-dot" aria-hidden="true" /> {diagnosticsStatusLabel}</p>
+                {status.trim().toLowerCase() !== 'ready' && <p className="status-hint">{status}</p>}
                 {recoveryHint && <p className="status-hint">Tip: {recoveryHint}</p>}
             </header>
 
             <main className="dashboard workspace-layout">
                 <section className="panel diagnostics-panel side-panel">
-                    <h2>Diagnostics</h2>
-                    <div className="diagnostics-summary">
-                        <p>
-                            Status:{' '}
-                            <span className={diagnosticsStatusClass}>
-                                {diagnosticsStatusLabel}
-                            </span>
-                        </p>
-                        <p>Last run: {healthReport?.checkedAt ? new Date(healthReport.checkedAt).toLocaleString() : 'Not run yet'}</p>
+                    <div className="panel-header-row diag-header">
+                        <h2>Diagnostics</h2>
+                        <span className={`diag-pill ${diagnosticsStatusClass}`}>
+                            <span className="diag-pill-dot" aria-hidden="true" />
+                            {diagnosticsStatusLabel}
+                        </span>
                     </div>
-                    <button className="refresh-btn" onClick={() => void onRunHealthCheck()} disabled={isLoading || isModalOpen}>
-                        {isLoading ? 'Running...' : 'Run Diagnostics'}
+                    <p className="diag-last-run">Last run: {healthReport?.checkedAt ? new Date(healthReport.checkedAt).toLocaleString() : 'Not run yet'}</p>
+                    <button className="diag-run-btn" onClick={() => void onRunHealthCheck()} disabled={isLoading || isModalOpen}>
+                        <span className="diag-run-glow" aria-hidden="true" />
+                        <span className="diag-run-label">
+                            {isLoading ? 'Running...' : (<><Zap size={13} strokeWidth={2.15} /> Run Diagnostics</>)}
+                        </span>
                     </button>
                     {(needsProfilesFolderFix || needsMarkerFileFix) && (
                         <div className="diag-actions">
@@ -755,14 +826,13 @@ function App() {
                         <ul className="health-list">
                             {healthReport.items.map((item) => (
                                 <li key={item.name} className={`health-item ${item.severity}`}>
-                                    {item.severity === 'warn' ? (
-                                        <span className="health-icon triangle" aria-hidden="true" />
-                                    ) : (
-                                        <span className="health-icon circle" aria-hidden="true">
-                                            {item.severity === 'ok' ? '✓' : '✕'}
-                                        </span>
-                                    )}
-                                    <strong>{item.name.replaceAll('_', ' ')}</strong>
+                                    <span className={`health-state ${item.severity}`} aria-hidden="true">
+                                        {item.severity === 'ok' ? <CheckCircle2 size={16} strokeWidth={2.2} /> : item.severity === 'warn' ? <AlertTriangle size={16} strokeWidth={2.1} /> : <CircleX size={16} strokeWidth={2.1} />}
+                                    </span>
+                                    <div className="health-title">
+                                        <span className="health-item-icon" aria-hidden="true">{getDiagnosticItemIcon(item.name)}</span>
+                                        <strong>{item.name.replaceAll('_', ' ')}</strong>
+                                    </div>
                                     <span className="health-message">{item.message}</span>
                                 </li>
                             ))}
@@ -770,28 +840,34 @@ function App() {
                     )}
                 </section>
 
-                <section className="panel primary-panel">
+                <div className="primary-stack">
+                <section className="panel profile-section-card">
                     <div className="panel-block">
                         <div className="panel-header-row">
                             <h2>Profiles</h2>
-                            <span className="field-hint">Active: {activeProfile || 'None selected'}</span>
+                            <span className="field-hint">Active: <strong>{activeProfile || 'None selected'}</strong></span>
                         </div>
 
                         {profiles.length > 0 ? (
-                            <div className="profile-picker-row">
-                                <select
-                                    value={selectedProfileName}
-                                    onChange={(event) => setSelectedProfileName(event.target.value)}
-                                    disabled={isLoading || isModalOpen}
-                                    aria-label="Select profile"
-                                >
-                                    {profiles.map((profile) => (
-                                        <option key={profile.name} value={profile.name}>
-                                            {profile.name}{profile.name === activeProfile ? ' (active)' : ''}
-                                        </option>
-                                    ))}
-                                </select>
+                            <div className="profile-toolbar">
+                                <div className="profile-select-wrap">
+                                    <select
+                                        className={selectedProfileName === activeProfile ? 'has-active-tag' : ''}
+                                        value={selectedProfileName}
+                                        onChange={(event) => setSelectedProfileName(event.target.value)}
+                                        disabled={isLoading || isModalOpen}
+                                        aria-label="Select profile"
+                                    >
+                                        {profiles.map((profile) => (
+                                            <option key={profile.name} value={profile.name}>
+                                                {profile.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {selectedProfileName === activeProfile && <span className="profile-active-tag">ACTIVE</span>}
+                                </div>
                                 <button className="switch-btn" onClick={() => void onSwitchSelectedProfile()} disabled={isLoading || isModalOpen || !canSwitchSelected}>
+                                    <ArrowRightLeft size={13} strokeWidth={2.1} />
                                     Switch
                                 </button>
                                 <button
@@ -800,6 +876,7 @@ function App() {
                                     disabled={isLoading || isModalOpen || !selectedProfileName}
                                     aria-label="Rename selected profile"
                                 >
+                                    <Edit3 size={13} strokeWidth={2.1} />
                                     Rename
                                 </button>
                                 <button
@@ -808,6 +885,7 @@ function App() {
                                     disabled={isLoading || isModalOpen || !selectedProfileName || selectedProfileName === activeProfile}
                                     aria-label="Delete selected profile"
                                 >
+                                    <Trash2 size={13} strokeWidth={2.1} />
                                     Delete
                                 </button>
                             </div>
@@ -819,10 +897,16 @@ function App() {
                         )}
                     </div>
 
-                    <div className="panel-block" ref={saveActionsRef}>
-                        <h2>Save Actions</h2>
-                        <div className="setup-group">
-                            <label className="field-label" htmlFor="fresh-profile-input">Start New Save</label>
+                </section>
+
+                <section className="panel save-actions-panel" ref={saveActionsRef}>
+                    <h2>Save Actions</h2>
+                    <div className="save-actions-grid">
+                        <div className="setup-group save-card start-save-card">
+                            <div className="save-card-head">
+                                <span className="save-card-icon" aria-hidden="true"><Plus size={14} strokeWidth={2.2} /></span>
+                                <label className="field-label" htmlFor="fresh-profile-input">Start New Save</label>
+                            </div>
                             <div className="field-row">
                                 <input
                                     id="fresh-profile-input"
@@ -832,13 +916,16 @@ function App() {
                                     disabled={isLoading || isModalOpen}
                                 />
                                 <button className="action-btn" onClick={() => void onPrepareFresh()} disabled={isLoading || isModalOpen || !canPrepareFresh}>
-                                    Start New Save
+                                    <Plus size={14} strokeWidth={2.2} /> Start New Save
                                 </button>
                             </div>
                         </div>
 
-                        <div className="setup-group save-current-group">
-                            <label className="field-label" htmlFor="save-profile-input">Save Current Progress</label>
+                        <div className="setup-group save-current-group save-card save-progress-card">
+                            <div className="save-card-head">
+                                <span className="save-card-icon" aria-hidden="true"><Save size={13} strokeWidth={2.2} /></span>
+                                <label className="field-label" htmlFor="save-profile-input">Save Current Progress</label>
+                            </div>
                             <div className="save-mode-row" role="radiogroup" aria-label="Save current destination mode">
                                 <label className="save-mode-option">
                                     <input
@@ -887,132 +974,101 @@ function App() {
                             )}
 
                             <p className="field-hint">
-                                Destination: <strong>{resolvedSaveDestination || 'Not selected'}</strong>. This copies current `savegame` + `wraps` into that profile.
+                                Destination: <strong>{resolvedSaveDestination || 'Not selected'}</strong>. This copies current <span className="path-token">savegame</span> + <span className="path-token">wraps</span> into that profile.
                             </p>
                             {!hasActiveDestination && saveDestinationMode === 'active' && (
                                 <p className="field-hint">No active marker detected yet. Use "Choose destination" or create `active_profile.txt` from Diagnostics.</p>
                             )}
                             <div className="field-row">
                                 <button className="action-btn secondary" onClick={() => void onSaveCurrent()} disabled={isLoading || isModalOpen || !canSaveCurrent}>
-                                    Save Current Progress
+                                    <Save size={15} strokeWidth={2.2} /> Save Progress
                                 </button>
                             </div>
                         </div>
-                    </div>
-
-                    <div className="panel-block">
-                        <h2>Save Setup</h2>
-                        <div className="setup-group">
-                            <label className="field-label" htmlFor="savegame-path-input">SaveGame Path</label>
-                            <p className="path">{saveGamePath ? maskWindowsUserPath(saveGamePath) : 'Not set'}</p>
-                            <div className="field-row">
-                                <input
-                                    id="savegame-path-input"
-                                    value={saveGamePathInput}
-                                    onChange={(event) => setSaveGamePathInput(event.target.value)}
-                                    placeholder="C:\\Users\\<user>\\Documents\\Need for speed heat\\SaveGame"
-                                    disabled={isLoading || isModalOpen}
-                                />
-                                <button className="action-btn secondary" onClick={() => void onApplyPath()} disabled={isLoading || isModalOpen || !canApplyPath}>
-                                    Apply Path
-                                </button>
-                            </div>
-                            <p className="field-hint">Path must point directly to the `SaveGame` folder.</p>
-                        </div>
-                    </div>
-
-                    <div className="panel-block">
-                        <div className="bundle-header-row">
-                            <div>
-                                <h2>Advanced</h2>
-                                <p className="field-hint">Bundle Transfer tools for manually moving profiles between machines or backups.</p>
-                            </div>
-                            <button
-                                className="switch-btn secondary"
-                                onClick={() => setIsBundleExpanded((open) => !open)}
-                                disabled={isLoading || isModalOpen}
-                                aria-expanded={isBundleExpanded}
-                                aria-controls="bundle-transfer-content"
-                            >
-                                {isBundleExpanded ? '▾ Hide Advanced' : '▸ Show Advanced'}
-                            </button>
-                        </div>
-
-                        {isBundleExpanded && (
-                            <div id="bundle-transfer-content" className="bundle-content">
-                                <label className="field-label" htmlFor="export-profile-input">Export profile to .zip</label>
-                                <div className="field-row bundle-row">
-                                    <select
-                                        id="export-profile-input"
-                                        value={exportProfileName}
-                                        onChange={(event) => setExportProfileName(event.target.value)}
-                                        disabled={isLoading || isModalOpen}
-                                    >
-                                        {profiles.length === 0 ? (
-                                            <option value="">No profiles available</option>
-                                        ) : (
-                                            profiles.map((profile) => (
-                                                <option key={profile.name} value={profile.name}>
-                                                    {profile.name}
-                                                </option>
-                                            ))
-                                        )}
-                                    </select>
-                                </div>
-                                {profiles.length === 0 && <p className="field-hint">Create or save a profile first, then export it.</p>}
-                                <p className="field-hint">Bundle will be saved automatically to `SaveGame/Exports`.</p>
-                                <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen || !canExportBundle}>
-                                    Export Bundle
-                                </button>
-
-                                <label className="field-label" htmlFor="import-profile-input">Import .zip into profile</label>
-                                <div className="field-row bundle-row import-row">
-                                    <select
-                                        id="import-profile-input"
-                                        value={importTargetProfile}
-                                        onChange={(event) => {
-                                            const next = event.target.value;
-                                            setImportTargetProfile(next);
-                                            if (next !== NEW_PROFILE_OPTION) {
-                                                setImportTargetNewName('');
-                                            }
-                                        }}
-                                        disabled={isLoading || isModalOpen}
-                                    >
-                                        {profiles.map((profile) => (
-                                            <option key={profile.name} value={profile.name}>
-                                                {profile.name}
-                                            </option>
-                                        ))}
-                                        <option value={NEW_PROFILE_OPTION}>Create new profile...</option>
-                                    </select>
-                                    <button className="action-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading || isModalOpen}>
-                                        Browse...
-                                    </button>
-                                </div>
-                                {importTargetProfile === NEW_PROFILE_OPTION && (
-                                    <div className="field-row">
-                                        <input
-                                            ref={importNewProfileRef}
-                                            value={importTargetNewName}
-                                            onChange={(event) => setImportTargetNewName(event.target.value)}
-                                            placeholder="New profile name"
-                                            disabled={isLoading || isModalOpen}
-                                        />
-                                    </div>
-                                )}
-                                <p className="field-hint">Selected bundle: <strong>{importBundlePath || 'None selected'}</strong></p>
-                                <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen || !canImportBundle}>
-                                    Import Bundle
-                                </button>
-                            </div>
-                        )}
                     </div>
                 </section>
+
+                <section className="panel save-setup-panel">
+                    <h2>Save Setup</h2>
+                    <div className="setup-group save-setup-inner-card">
+                        <label className="field-label savegame-path-label" htmlFor="savegame-path-input">
+                            <FolderOpen size={13} strokeWidth={2} />
+                            <span>SaveGame Path</span>
+                        </label>
+                        <p className="path">{saveGamePath ? maskWindowsUserPath(saveGamePath) : 'Not set'}</p>
+                        <div className="field-row">
+                            <input
+                                id="savegame-path-input"
+                                value={saveGamePathInput}
+                                onChange={(event) => setSaveGamePathInput(event.target.value)}
+                                placeholder="C:\\Users\\<user>\\Documents\\Need for speed heat\\SaveGame"
+                                disabled={isLoading || isModalOpen}
+                            />
+                            <button className="action-btn secondary" onClick={() => void onApplyPath()} disabled={isLoading || isModalOpen || !canApplyPath}>
+                                Apply Path
+                            </button>
+                        </div>
+                        <p className="field-hint">Path must point directly to the <span className="path-token">SaveGame</span> folder.</p>
+                    </div>
+                </section>
+
+                <section className="panel advanced-panel">
+                    <div className="bundle-header-row">
+                        <div>
+                            <h2>Advanced</h2>
+                            <p className="field-hint">Bundle Transfer tools for manually moving profiles between machines or backups.</p>
+                        </div>
+                        <button
+                            className="switch-btn secondary"
+                            onClick={() => setIsBundleExpanded((open) => !open)}
+                            disabled={isLoading || isModalOpen}
+                            aria-expanded={isBundleExpanded}
+                            aria-controls="bundle-transfer-content"
+                        >
+                            {isBundleExpanded ? 'Hide' : 'Show'}
+                        </button>
+                    </div>
+
+                    {isBundleExpanded && (
+                        <div id="bundle-transfer-content" className="bundle-content">
+                            <div className="advanced-cards-grid">
+                                <div className="advanced-tool-card export-tool-card">
+                                    <div className="advanced-tool-head">
+                                        <span className="advanced-tool-icon" aria-hidden="true"><Download size={14} strokeWidth={2.1} /></span>
+                                        <h3>Export Profile</h3>
+                                    </div>
+                                    <p className="advanced-tool-copy">Export to a .zip bundle for backup or transfer to another machine.</p>
+                                    {profiles.length === 0 && <p className="field-hint">Create or save a profile first, then export it.</p>}
+                                    <button className="action-btn advanced-tool-action export-action" onClick={openExportModal} disabled={isLoading || isModalOpen || profiles.length === 0}>
+                                        <Download size={14} strokeWidth={2.1} /> Export Bundle
+                                    </button>
+                                </div>
+
+                                <div className="advanced-tool-card import-tool-card">
+                                    <div className="advanced-tool-head">
+                                        <span className="advanced-tool-icon" aria-hidden="true"><Upload size={14} strokeWidth={2.1} /></span>
+                                        <h3>Import Profile</h3>
+                                    </div>
+                                    <p className="advanced-tool-copy">Import a profile bundle from another machine or backup.</p>
+                                    <button className="action-btn secondary advanced-tool-action import-action" onClick={openImportModal} disabled={isLoading || isModalOpen}>
+                                        <Upload size={14} strokeWidth={2.1} /> Import Bundle
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </section>
+                </div>
             </main>
             <footer className="footnote">
                 <p>Marker file: active_profile.txt</p>
             </footer>
+
+            {toastMessage && (
+                <div className="toast toast-success" role="status" aria-live="polite">
+                    <CheckCircle2 size={15} strokeWidth={2.2} /> {toastMessage}
+                </div>
+            )}
 
             {diagnosticsModal && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="diag-modal-title" aria-describedby="diag-modal-description">
@@ -1112,6 +1168,95 @@ function App() {
                                 )}
                             </>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {isExportModalOpen && (
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" aria-describedby="export-modal-description">
+                    <div className="modal-card export-modal-card" onClick={(event) => event.stopPropagation()}>
+                        <h3 id="export-modal-title">Export Profile Bundle</h3>
+                        <p id="export-modal-description">Choose which profile to export. The bundle will be created in <span className="path-token">SaveGame/Exports</span>.</p>
+                        <label className="field-label" htmlFor="export-profile-modal-input">Profile to export</label>
+                        <select
+                            id="export-profile-modal-input"
+                            value={exportProfileName}
+                            onChange={(event) => setExportProfileName(event.target.value)}
+                            disabled={isLoading}
+                            autoFocus
+                        >
+                            {profiles.length === 0 ? (
+                                <option value="">No profiles available</option>
+                            ) : (
+                                profiles.map((profile) => (
+                                    <option key={profile.name} value={profile.name}>
+                                        {profile.name}
+                                    </option>
+                                ))
+                            )}
+                        </select>
+                        <div className="modal-actions">
+                            <button className="switch-btn secondary" onClick={closeExportModal} disabled={isLoading}>
+                                Cancel
+                            </button>
+                            <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || !canExportBundle}>
+                                <Download size={14} strokeWidth={2.1} /> Export Bundle
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isImportModalOpen && (
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="import-modal-title" aria-describedby="import-modal-description">
+                    <div className="modal-card import-modal-card" onClick={(event) => event.stopPropagation()}>
+                        <h3 id="import-modal-title">Import Profile Bundle</h3>
+                        <p id="import-modal-description">Choose destination profile and bundle file to import.</p>
+                        <label className="field-label" htmlFor="import-profile-modal-input">Import .zip into profile</label>
+                        <div className="field-row import-modal-row">
+                            <select
+                                id="import-profile-modal-input"
+                                value={importTargetProfile}
+                                onChange={(event) => {
+                                    const next = event.target.value;
+                                    setImportTargetProfile(next);
+                                    if (next !== NEW_PROFILE_OPTION) {
+                                        setImportTargetNewName('');
+                                    }
+                                }}
+                                disabled={isLoading}
+                            >
+                                {profiles.map((profile) => (
+                                    <option key={profile.name} value={profile.name}>
+                                        {profile.name}
+                                    </option>
+                                ))}
+                                <option value={NEW_PROFILE_OPTION}>Create new profile...</option>
+                            </select>
+                            <button className="switch-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading}>
+                                Browse...
+                            </button>
+                        </div>
+                        {importTargetProfile === NEW_PROFILE_OPTION && (
+                            <div className="field-row">
+                                <input
+                                    ref={importNewProfileRef}
+                                    value={importTargetNewName}
+                                    onChange={(event) => setImportTargetNewName(event.target.value)}
+                                    placeholder="New profile name"
+                                    disabled={isLoading}
+                                />
+                            </div>
+                        )}
+                        <p className="field-hint import-modal-selected">Selected bundle: <strong>{importBundlePath || 'None selected'}</strong></p>
+                        <div className="modal-actions">
+                            <button className="switch-btn secondary" onClick={closeImportModal} disabled={isLoading}>
+                                Cancel
+                            </button>
+                            <button className="action-btn secondary import-action" onClick={() => void onImportBundle()} disabled={isLoading || !canImportBundle}>
+                                <Upload size={14} strokeWidth={2.1} /> Import Bundle
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
