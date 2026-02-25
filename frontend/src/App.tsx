@@ -1,4 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
+import {AlertTriangle, CheckCircle2, CircleX, FileText, Folder, FolderOpen, HardDrive, RefreshCw, Zap} from 'lucide-react';
 import './App.css';
 import {
     CreateMarkerFile,
@@ -139,6 +140,23 @@ function buildExportBundlePath(saveGamePath: string, profileName: string): strin
     return `${saveGamePath}\\Exports\\${safe}-${stamp}.zip`;
 }
 
+function getDiagnosticItemIcon(name: string) {
+    switch (name) {
+    case 'savegame_path':
+        return <HardDrive size={14} strokeWidth={2} />;
+    case 'marker_file':
+        return <FileText size={14} strokeWidth={2} />;
+    case 'active_profile_folder':
+    case 'profiles_path':
+        return <FolderOpen size={14} strokeWidth={2} />;
+    case 'root_savegame_folder':
+    case 'root_wraps_folder':
+        return <Folder size={14} strokeWidth={2} />;
+    default:
+        return <Folder size={14} strokeWidth={2} />;
+    }
+}
+
 function App() {
     const [saveGamePath, setSaveGamePath] = useState('');
     const [saveGamePathInput, setSaveGamePathInput] = useState('');
@@ -168,13 +186,6 @@ function App() {
     const importNewProfileRef = useRef<HTMLInputElement | null>(null);
 
     const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null;
-
-    const loweredStatus = status.toLowerCase();
-    const statusTone = loweredStatus.includes('failed') || loweredStatus.includes('invalid') || loweredStatus.includes('cannot')
-        ? 'danger'
-        : isLoading
-            ? 'loading'
-            : 'ok';
 
     const canApplyPath = saveGamePathInput.trim() !== '';
     const canPrepareFresh = freshProfileName.trim() !== '';
@@ -710,30 +721,34 @@ function App() {
     return (
         <div className="app-shell">
             <header className="hero">
-                <p className="eyebrow">Need for Speed Heat</p>
+                <p className="eyebrow"><Zap size={11} strokeWidth={2.3} /> Need for Speed Heat</p>
                 <h1>Heat Save Manager</h1>
-                <p className="current-profile">Current Profile: <strong>{activeProfile || 'None selected'}</strong></p>
-                <button className="top-refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
-                    ↻ Refresh
-                </button>
-                <p className={`status ${statusTone}`}>{status}</p>
+                <div className="hero-actions">
+                    <p className="current-profile">Current Profile: <strong>{activeProfile || 'None selected'}</strong></p>
+                    <button className="top-refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
+                        <RefreshCw size={13} strokeWidth={2.2} className={isLoading ? 'spin' : ''} /> Refresh
+                    </button>
+                </div>
+                <p className={`status ${diagnosticsStatusClass}`}><span className="status-dot" aria-hidden="true" /> {diagnosticsStatusLabel}</p>
+                {status.trim().toLowerCase() !== 'ready' && <p className="status-hint">{status}</p>}
                 {recoveryHint && <p className="status-hint">Tip: {recoveryHint}</p>}
             </header>
 
             <main className="dashboard workspace-layout">
                 <section className="panel diagnostics-panel side-panel">
-                    <h2>Diagnostics</h2>
-                    <div className="diagnostics-summary">
-                        <p>
-                            Status:{' '}
-                            <span className={diagnosticsStatusClass}>
-                                {diagnosticsStatusLabel}
-                            </span>
-                        </p>
-                        <p>Last run: {healthReport?.checkedAt ? new Date(healthReport.checkedAt).toLocaleString() : 'Not run yet'}</p>
+                    <div className="panel-header-row diag-header">
+                        <h2>Diagnostics</h2>
+                        <span className={`diag-pill ${diagnosticsStatusClass}`}>
+                            <span className="diag-pill-dot" aria-hidden="true" />
+                            {diagnosticsStatusLabel}
+                        </span>
                     </div>
-                    <button className="refresh-btn" onClick={() => void onRunHealthCheck()} disabled={isLoading || isModalOpen}>
-                        {isLoading ? 'Running...' : 'Run Diagnostics'}
+                    <p className="diag-last-run">Last run: {healthReport?.checkedAt ? new Date(healthReport.checkedAt).toLocaleString() : 'Not run yet'}</p>
+                    <button className="diag-run-btn" onClick={() => void onRunHealthCheck()} disabled={isLoading || isModalOpen}>
+                        <span className="diag-run-glow" aria-hidden="true" />
+                        <span className="diag-run-label">
+                            {isLoading ? 'Running...' : (<><Zap size={13} strokeWidth={2.15} /> Run Diagnostics</>)}
+                        </span>
                     </button>
                     {(needsProfilesFolderFix || needsMarkerFileFix) && (
                         <div className="diag-actions">
@@ -755,14 +770,13 @@ function App() {
                         <ul className="health-list">
                             {healthReport.items.map((item) => (
                                 <li key={item.name} className={`health-item ${item.severity}`}>
-                                    {item.severity === 'warn' ? (
-                                        <span className="health-icon triangle" aria-hidden="true" />
-                                    ) : (
-                                        <span className="health-icon circle" aria-hidden="true">
-                                            {item.severity === 'ok' ? '✓' : '✕'}
-                                        </span>
-                                    )}
-                                    <strong>{item.name.replaceAll('_', ' ')}</strong>
+                                    <span className={`health-state ${item.severity}`} aria-hidden="true">
+                                        {item.severity === 'ok' ? <CheckCircle2 size={16} strokeWidth={2.2} /> : item.severity === 'warn' ? <AlertTriangle size={16} strokeWidth={2.1} /> : <CircleX size={16} strokeWidth={2.1} />}
+                                    </span>
+                                    <div className="health-title">
+                                        <span className="health-item-icon" aria-hidden="true">{getDiagnosticItemIcon(item.name)}</span>
+                                        <strong>{item.name.replaceAll('_', ' ')}</strong>
+                                    </div>
                                     <span className="health-message">{item.message}</span>
                                 </li>
                             ))}
@@ -821,7 +835,8 @@ function App() {
 
                     <div className="panel-block" ref={saveActionsRef}>
                         <h2>Save Actions</h2>
-                        <div className="setup-group">
+                        <div className="save-actions-grid">
+                        <div className="setup-group save-card">
                             <label className="field-label" htmlFor="fresh-profile-input">Start New Save</label>
                             <div className="field-row">
                                 <input
@@ -837,7 +852,7 @@ function App() {
                             </div>
                         </div>
 
-                        <div className="setup-group save-current-group">
+                        <div className="setup-group save-current-group save-card">
                             <label className="field-label" htmlFor="save-profile-input">Save Current Progress</label>
                             <div className="save-mode-row" role="radiogroup" aria-label="Save current destination mode">
                                 <label className="save-mode-option">
@@ -897,6 +912,7 @@ function App() {
                                     Save Current Progress
                                 </button>
                             </div>
+                        </div>
                         </div>
                     </div>
 
