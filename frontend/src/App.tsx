@@ -41,6 +41,8 @@ type ErrorFeedback = {
     hint: string;
 };
 
+const NEW_PROFILE_OPTION = '__new__';
+
 function normalizeError(error: unknown): string {
     if (error instanceof Error) {
         return error.message;
@@ -136,7 +138,9 @@ function App() {
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [activeProfile, setActiveProfile] = useState('');
     const [freshProfileName, setFreshProfileName] = useState('');
-    const [saveProfileName, setSaveProfileName] = useState('');
+    const [saveDestinationMode, setSaveDestinationMode] = useState<'active' | 'custom'>('active');
+    const [saveDestinationProfile, setSaveDestinationProfile] = useState('');
+    const [saveDestinationNewName, setSaveDestinationNewName] = useState('');
     const [exportProfileName, setExportProfileName] = useState('');
     const [exportBundlePath, setExportBundlePath] = useState('');
     const [importProfileName, setImportProfileName] = useState('');
@@ -163,13 +167,16 @@ function App() {
 
     const canApplyPath = saveGamePathInput.trim() !== '';
     const canPrepareFresh = freshProfileName.trim() !== '';
-    const canSaveCurrent = saveProfileName.trim() !== '' || activeProfile.trim() !== '';
     const canExportBundle = exportProfileName.trim() !== '' && exportBundlePath.trim() !== '';
     const canImportBundle = importProfileName.trim() !== '' && importBundlePath.trim() !== '';
     const canSwitchSelected = selectedProfileName.trim() !== '' && selectedProfileName !== activeProfile;
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
     const needsProfilesFolderFix = healthReport?.items.some((item) => item.name === 'profiles_path' && !item.ok) ?? false;
     const needsMarkerFileFix = markerHealthItem?.message.toLowerCase().includes('is missing') ?? false;
+    const hasActiveDestination = activeProfile.trim() !== '' && !needsMarkerFileFix;
+    const selectedCustomDestination = saveDestinationProfile === NEW_PROFILE_OPTION ? saveDestinationNewName.trim() : saveDestinationProfile.trim();
+    const resolvedSaveDestination = saveDestinationMode === 'active' ? activeProfile.trim() : selectedCustomDestination;
+    const canSaveCurrent = resolvedSaveDestination !== '';
 
     async function loadData() {
         try {
@@ -206,6 +213,26 @@ function App() {
                 }
 
                 return profileItems[0]?.name ?? '';
+            });
+
+            setSaveDestinationProfile((current) => {
+                if (current === NEW_PROFILE_OPTION) {
+                    return NEW_PROFILE_OPTION;
+                }
+
+                if (current && profileItems.some((profile) => profile.name === current)) {
+                    return current;
+                }
+
+                return profileItems[0]?.name ?? NEW_PROFILE_OPTION;
+            });
+
+            setSaveDestinationMode((current) => {
+                if (current === 'active' && !resolvedActive) {
+                    return 'custom';
+                }
+
+                return current;
             });
 
             setStatus('Ready');
@@ -359,15 +386,26 @@ function App() {
     }
 
     async function onSaveCurrent() {
-        const requested = saveProfileName.trim();
-        const target = requested || activeProfile || 'active profile marker';
+        if (!canSaveCurrent) {
+            if (saveDestinationMode === 'active') {
+                setStatus('No active profile marker found. Choose another destination first.');
+            } else {
+                setStatus('Choose or enter a destination profile first.');
+            }
+            return;
+        }
+
+        const target = resolvedSaveDestination;
+        const requested = saveDestinationMode === 'active' ? '' : target;
 
         try {
             setIsLoading(true);
             setStatus(`Saving current root data into ${target}...`);
             setRecoveryHint('');
             await SaveCurrentProfile(requested);
-            setSaveProfileName('');
+            if (saveDestinationProfile === NEW_PROFILE_OPTION) {
+                setSaveDestinationNewName('');
+            }
             await loadData();
             setStatus(`Current root save exported to ${target}.`);
         } catch (error) {
@@ -692,16 +730,62 @@ function App() {
                             </div>
                         </div>
 
-                        <div className="setup-group">
+                        <div className="setup-group save-current-group">
                             <label className="field-label" htmlFor="save-profile-input">Save Current Progress</label>
+                            <div className="save-mode-row" role="radiogroup" aria-label="Save current destination mode">
+                                <label className="save-mode-option">
+                                    <input
+                                        type="radio"
+                                        checked={saveDestinationMode === 'active'}
+                                        onChange={() => setSaveDestinationMode('active')}
+                                        disabled={isLoading || isModalOpen || !hasActiveDestination}
+                                    />
+                                    <span>Use active ({activeProfile || 'none'})</span>
+                                </label>
+                                <label className="save-mode-option">
+                                    <input
+                                        type="radio"
+                                        checked={saveDestinationMode === 'custom'}
+                                        onChange={() => setSaveDestinationMode('custom')}
+                                        disabled={isLoading || isModalOpen}
+                                    />
+                                    <span>Choose destination</span>
+                                </label>
+                            </div>
+
+                            {saveDestinationMode === 'custom' && (
+                                <div className="save-destination-grid">
+                                    <select
+                                        id="save-profile-input"
+                                        value={saveDestinationProfile}
+                                        onChange={(event) => setSaveDestinationProfile(event.target.value)}
+                                        disabled={isLoading || isModalOpen}
+                                    >
+                                        {profiles.map((profile) => (
+                                            <option key={profile.name} value={profile.name}>
+                                                {profile.name}{profile.name === activeProfile ? ' (active)' : ''}
+                                            </option>
+                                        ))}
+                                        <option value={NEW_PROFILE_OPTION}>Create new profile...</option>
+                                    </select>
+                                    {saveDestinationProfile === NEW_PROFILE_OPTION && (
+                                        <input
+                                            value={saveDestinationNewName}
+                                            onChange={(event) => setSaveDestinationNewName(event.target.value)}
+                                            placeholder="New profile name"
+                                            disabled={isLoading || isModalOpen}
+                                        />
+                                    )}
+                                </div>
+                            )}
+
+                            <p className="field-hint">
+                                Destination: <strong>{resolvedSaveDestination || 'Not selected'}</strong>. This copies current `savegame` + `wraps` into that profile.
+                            </p>
+                            {!hasActiveDestination && saveDestinationMode === 'active' && (
+                                <p className="field-hint">No active marker detected yet. Use "Choose destination" or create `active_profile.txt` from Diagnostics.</p>
+                            )}
                             <div className="field-row">
-                                <input
-                                    id="save-profile-input"
-                                    value={saveProfileName}
-                                    onChange={(event) => setSaveProfileName(event.target.value)}
-                                    placeholder="Leave blank to use active"
-                                    disabled={isLoading || isModalOpen}
-                                />
                                 <button className="action-btn secondary" onClick={() => void onSaveCurrent()} disabled={isLoading || isModalOpen || !canSaveCurrent}>
                                     Save Current Progress
                                 </button>
