@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {AlertTriangle, ArrowRightLeft, CheckCircle2, CircleX, Edit3, FileText, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Save, Trash2, Zap} from 'lucide-react';
+import {AlertTriangle, ArrowRightLeft, CheckCircle2, CircleX, Download, Edit3, FileText, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Save, Trash2, Upload, Zap} from 'lucide-react';
 import './App.css';
 import {
     CreateMarkerFile,
@@ -179,13 +179,17 @@ function App() {
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
     const [markerDialogProfile, setMarkerDialogProfile] = useState('');
     const [diagnosticsModal, setDiagnosticsModal] = useState<DiagnosticsQuickAction | null>(null);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [firstSaveProfileName, setFirstSaveProfileName] = useState('');
     const [isBundleExpanded, setIsBundleExpanded] = useState(false);
     const [selectedProfileName, setSelectedProfileName] = useState('');
+    const [toastMessage, setToastMessage] = useState('');
     const saveActionsRef = useRef<HTMLDivElement | null>(null);
     const importNewProfileRef = useRef<HTMLInputElement | null>(null);
+    const toastTimerRef = useRef<number | null>(null);
 
-    const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null;
+    const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen;
 
     const canApplyPath = saveGamePathInput.trim() !== '';
     const canPrepareFresh = freshProfileName.trim() !== '';
@@ -508,6 +512,8 @@ function App() {
             setRecoveryHint('');
             await ExportProfileBundle(profileName, bundlePath);
             setStatus(`Bundle exported: ${bundlePath}`);
+            setToastMessage(`Exported bundle for ${profileName}.`);
+            setIsExportModalOpen(false);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Bundle export failed');
             setStatus(feedback.message);
@@ -537,6 +543,8 @@ function App() {
             await ImportProfileBundle(profileName, bundlePath);
             await loadData();
             setStatus(`Bundle imported into profile ${profileName}.`);
+            setToastMessage(`Imported bundle into ${profileName}.`);
+            setIsImportModalOpen(false);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Bundle import failed');
             setStatus(feedback.message);
@@ -623,6 +631,22 @@ function App() {
         setDiagnosticsModal(null);
     }
 
+    function openExportModal() {
+        setIsExportModalOpen(true);
+    }
+
+    function closeExportModal() {
+        setIsExportModalOpen(false);
+    }
+
+    function openImportModal() {
+        setIsImportModalOpen(true);
+    }
+
+    function closeImportModal() {
+        setIsImportModalOpen(false);
+    }
+
     async function onSaveCurrentFromModal() {
         const profileName = firstSaveProfileName.trim();
         if (!profileName) {
@@ -667,6 +691,16 @@ function App() {
 
         if (diagnosticsModal) {
             closeDiagnosticsModal();
+            return;
+        }
+
+        if (isExportModalOpen) {
+            closeExportModal();
+            return;
+        }
+
+        if (isImportModalOpen) {
+            closeImportModal();
         }
     }
 
@@ -710,13 +744,35 @@ function App() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isModalOpen, isLoading, renameTarget, deleteTarget, diagnosticsModal]);
+    }, [isModalOpen, isLoading, renameTarget, deleteTarget, diagnosticsModal, isExportModalOpen, isImportModalOpen]);
 
     useEffect(() => {
         if (importTargetProfile === NEW_PROFILE_OPTION) {
             importNewProfileRef.current?.focus();
         }
     }, [importTargetProfile]);
+
+    useEffect(() => {
+        if (!toastMessage) {
+            return;
+        }
+
+        if (toastTimerRef.current !== null) {
+            window.clearTimeout(toastTimerRef.current);
+        }
+
+        toastTimerRef.current = window.setTimeout(() => {
+            setToastMessage('');
+            toastTimerRef.current = null;
+        }, 3200);
+
+        return () => {
+            if (toastTimerRef.current !== null) {
+                window.clearTimeout(toastTimerRef.current);
+                toastTimerRef.current = null;
+            }
+        };
+    }, [toastMessage]);
 
     return (
         <div className="app-shell">
@@ -969,77 +1025,36 @@ function App() {
                             aria-expanded={isBundleExpanded}
                             aria-controls="bundle-transfer-content"
                         >
-                            {isBundleExpanded ? '▾ Hide Advanced' : '▸ Show Advanced'}
+                            {isBundleExpanded ? 'Hide' : 'Show'}
                         </button>
                     </div>
 
                     {isBundleExpanded && (
                         <div id="bundle-transfer-content" className="bundle-content">
-                            <label className="field-label" htmlFor="export-profile-input">Export profile to .zip</label>
-                            <div className="field-row bundle-row">
-                                <select
-                                    id="export-profile-input"
-                                    value={exportProfileName}
-                                    onChange={(event) => setExportProfileName(event.target.value)}
-                                    disabled={isLoading || isModalOpen}
-                                >
-                                    {profiles.length === 0 ? (
-                                        <option value="">No profiles available</option>
-                                    ) : (
-                                        profiles.map((profile) => (
-                                            <option key={profile.name} value={profile.name}>
-                                                {profile.name}
-                                            </option>
-                                        ))
-                                    )}
-                                </select>
-                            </div>
-                            {profiles.length === 0 && <p className="field-hint">Create or save a profile first, then export it.</p>}
-                            <p className="field-hint">Bundle will be saved automatically to `SaveGame/Exports`.</p>
-                            <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || isModalOpen || !canExportBundle}>
-                                Export Bundle
-                            </button>
-
-                            <label className="field-label" htmlFor="import-profile-input">Import .zip into profile</label>
-                            <div className="field-row bundle-row import-row">
-                                <select
-                                    id="import-profile-input"
-                                    value={importTargetProfile}
-                                    onChange={(event) => {
-                                        const next = event.target.value;
-                                        setImportTargetProfile(next);
-                                        if (next !== NEW_PROFILE_OPTION) {
-                                            setImportTargetNewName('');
-                                        }
-                                    }}
-                                    disabled={isLoading || isModalOpen}
-                                >
-                                    {profiles.map((profile) => (
-                                        <option key={profile.name} value={profile.name}>
-                                            {profile.name}
-                                        </option>
-                                    ))}
-                                    <option value={NEW_PROFILE_OPTION}>Create new profile...</option>
-                                </select>
-                                <button className="action-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading || isModalOpen}>
-                                    Browse...
-                                </button>
-                            </div>
-                            {importTargetProfile === NEW_PROFILE_OPTION && (
-                                <div className="field-row">
-                                    <input
-                                        ref={importNewProfileRef}
-                                        value={importTargetNewName}
-                                        onChange={(event) => setImportTargetNewName(event.target.value)}
-                                        placeholder="New profile name"
-                                        disabled={isLoading || isModalOpen}
-                                    />
+                            <div className="advanced-cards-grid">
+                                <div className="advanced-tool-card export-tool-card">
+                                    <div className="advanced-tool-head">
+                                        <span className="advanced-tool-icon" aria-hidden="true"><Download size={14} strokeWidth={2.1} /></span>
+                                        <h3>Export Profile</h3>
+                                    </div>
+                                    <p className="advanced-tool-copy">Export to a .zip bundle for backup or transfer to another machine.</p>
+                                    {profiles.length === 0 && <p className="field-hint">Create or save a profile first, then export it.</p>}
+                                    <button className="action-btn advanced-tool-action export-action" onClick={openExportModal} disabled={isLoading || isModalOpen || profiles.length === 0}>
+                                        <Download size={14} strokeWidth={2.1} /> Export Bundle
+                                    </button>
                                 </div>
-                            )}
-                            <p className="field-hint">Selected bundle: <strong>{importBundlePath || 'None selected'}</strong></p>
-                            <button className="action-btn secondary" onClick={() => void onImportBundle()} disabled={isLoading || isModalOpen || !canImportBundle}>
-                                Import Bundle
-                            </button>
+
+                                <div className="advanced-tool-card import-tool-card">
+                                    <div className="advanced-tool-head">
+                                        <span className="advanced-tool-icon" aria-hidden="true"><Upload size={14} strokeWidth={2.1} /></span>
+                                        <h3>Import Profile</h3>
+                                    </div>
+                                    <p className="advanced-tool-copy">Import a profile bundle from another machine or backup.</p>
+                                    <button className="action-btn secondary advanced-tool-action import-action" onClick={openImportModal} disabled={isLoading || isModalOpen}>
+                                        <Upload size={14} strokeWidth={2.1} /> Import Bundle
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </section>
@@ -1048,6 +1063,12 @@ function App() {
             <footer className="footnote">
                 <p>Marker file: active_profile.txt</p>
             </footer>
+
+            {toastMessage && (
+                <div className="toast toast-success" role="status" aria-live="polite">
+                    <CheckCircle2 size={15} strokeWidth={2.2} /> {toastMessage}
+                </div>
+            )}
 
             {diagnosticsModal && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="diag-modal-title" aria-describedby="diag-modal-description">
@@ -1147,6 +1168,95 @@ function App() {
                                 )}
                             </>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {isExportModalOpen && (
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" aria-describedby="export-modal-description">
+                    <div className="modal-card export-modal-card" onClick={(event) => event.stopPropagation()}>
+                        <h3 id="export-modal-title">Export Profile Bundle</h3>
+                        <p id="export-modal-description">Choose which profile to export. The bundle will be created in <span className="path-token">SaveGame/Exports</span>.</p>
+                        <label className="field-label" htmlFor="export-profile-modal-input">Profile to export</label>
+                        <select
+                            id="export-profile-modal-input"
+                            value={exportProfileName}
+                            onChange={(event) => setExportProfileName(event.target.value)}
+                            disabled={isLoading}
+                            autoFocus
+                        >
+                            {profiles.length === 0 ? (
+                                <option value="">No profiles available</option>
+                            ) : (
+                                profiles.map((profile) => (
+                                    <option key={profile.name} value={profile.name}>
+                                        {profile.name}
+                                    </option>
+                                ))
+                            )}
+                        </select>
+                        <div className="modal-actions">
+                            <button className="switch-btn secondary" onClick={closeExportModal} disabled={isLoading}>
+                                Cancel
+                            </button>
+                            <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || !canExportBundle}>
+                                <Download size={14} strokeWidth={2.1} /> Export Bundle
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isImportModalOpen && (
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="import-modal-title" aria-describedby="import-modal-description">
+                    <div className="modal-card import-modal-card" onClick={(event) => event.stopPropagation()}>
+                        <h3 id="import-modal-title">Import Profile Bundle</h3>
+                        <p id="import-modal-description">Choose destination profile and bundle file to import.</p>
+                        <label className="field-label" htmlFor="import-profile-modal-input">Import .zip into profile</label>
+                        <div className="field-row import-modal-row">
+                            <select
+                                id="import-profile-modal-input"
+                                value={importTargetProfile}
+                                onChange={(event) => {
+                                    const next = event.target.value;
+                                    setImportTargetProfile(next);
+                                    if (next !== NEW_PROFILE_OPTION) {
+                                        setImportTargetNewName('');
+                                    }
+                                }}
+                                disabled={isLoading}
+                            >
+                                {profiles.map((profile) => (
+                                    <option key={profile.name} value={profile.name}>
+                                        {profile.name}
+                                    </option>
+                                ))}
+                                <option value={NEW_PROFILE_OPTION}>Create new profile...</option>
+                            </select>
+                            <button className="switch-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading}>
+                                Browse...
+                            </button>
+                        </div>
+                        {importTargetProfile === NEW_PROFILE_OPTION && (
+                            <div className="field-row">
+                                <input
+                                    ref={importNewProfileRef}
+                                    value={importTargetNewName}
+                                    onChange={(event) => setImportTargetNewName(event.target.value)}
+                                    placeholder="New profile name"
+                                    disabled={isLoading}
+                                />
+                            </div>
+                        )}
+                        <p className="field-hint import-modal-selected">Selected bundle: <strong>{importBundlePath || 'None selected'}</strong></p>
+                        <div className="modal-actions">
+                            <button className="switch-btn secondary" onClick={closeImportModal} disabled={isLoading}>
+                                Cancel
+                            </button>
+                            <button className="action-btn secondary import-action" onClick={() => void onImportBundle()} disabled={isLoading || !canImportBundle}>
+                                <Upload size={14} strokeWidth={2.1} /> Import Bundle
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
