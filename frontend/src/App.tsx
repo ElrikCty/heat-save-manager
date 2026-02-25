@@ -918,14 +918,14 @@ function App() {
                             )}
 
                             <p className="field-hint">
-                                Destination: <strong>{resolvedSaveDestination || 'Not selected'}</strong>. This copies current `savegame` + `wraps` into that profile.
+                                Destination: <strong>{resolvedSaveDestination || 'Not selected'}</strong>. This copies current <span className="path-token">savegame</span> + <span className="path-token">wraps</span> into that profile.
                             </p>
                             {!hasActiveDestination && saveDestinationMode === 'active' && (
                                 <p className="field-hint">No active marker detected yet. Use "Choose destination" or create `active_profile.txt` from Diagnostics.</p>
                             )}
                             <div className="field-row">
                                 <button className="action-btn secondary" onClick={() => void onSaveCurrent()} disabled={isLoading || isModalOpen || !canSaveCurrent}>
-                                    <Save size={13} strokeWidth={2.2} /> Save Current Progress
+                                    <Save size={15} strokeWidth={2.2} /> Save Progress
                                 </button>
                             </div>
                         </div>
