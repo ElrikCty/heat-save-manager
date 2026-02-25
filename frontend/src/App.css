@@ -91,6 +91,11 @@
     font-weight: 700;
 }
 
+.diag-warning {
+    color: #ffd08b;
+    font-weight: 700;
+}
+
 .health-list {
     margin: 0.75rem 0 0;
     padding: 0;
@@ -117,7 +122,6 @@
     grid-row: 1 / span 2;
     width: 1.05rem;
     height: 1.05rem;
-    border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -128,12 +132,33 @@
     margin-top: 0.08rem;
 }
 
-.health-item.ok .health-icon {
-    background: rgba(70, 201, 138, 0.95);
+.health-icon.circle {
+    border-radius: 999px;
 }
 
-.health-item.warn .health-icon {
-    background: rgba(255, 168, 103, 0.95);
+.health-icon.triangle {
+    width: 0;
+    height: 0;
+    border-left: 0.56rem solid transparent;
+    border-right: 0.56rem solid transparent;
+    border-bottom: 0.96rem solid rgba(255, 183, 94, 0.98);
+    position: relative;
+    margin-top: 0.02rem;
+}
+
+.health-icon.triangle::after {
+    content: '!';
+    position: absolute;
+    top: 0.3rem;
+    left: -0.09rem;
+    color: #1b2736;
+    font-size: 0.66rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.health-item.ok .health-icon {
+    background: rgba(70, 201, 138, 0.95);
 }
 
 .health-item.error .health-icon {
@@ -611,6 +636,23 @@ select option {
     padding: 0.55rem 0.7rem;
     background: rgba(255, 255, 255, 0.08);
     color: var(--text-main);
+}
+
+.modal-card select {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(162, 181, 200, 0.25);
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+    color-scheme: dark;
+}
+
+.modal-note {
+    margin: 0.65rem 0 0.2rem;
+    color: var(--text-muted);
+    font-size: 0.86rem;
 }
 
 .modal-card.danger {

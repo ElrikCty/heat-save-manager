@@ -41,6 +41,8 @@ type ErrorFeedback = {
     hint: string;
 };
 
+type DiagnosticsQuickAction = 'profiles' | 'marker';
+
 const NEW_PROFILE_OPTION = '__new__';
 
 function normalizeError(error: unknown): string {
@@ -152,11 +154,12 @@ function App() {
     const [renameTarget, setRenameTarget] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-    const [markerQuickProfile, setMarkerQuickProfile] = useState('');
+    const [markerDialogProfile, setMarkerDialogProfile] = useState('');
+    const [diagnosticsModal, setDiagnosticsModal] = useState<DiagnosticsQuickAction | null>(null);
     const [isBundleExpanded, setIsBundleExpanded] = useState(false);
     const [selectedProfileName, setSelectedProfileName] = useState('');
 
-    const isModalOpen = renameTarget !== null || deleteTarget !== null;
+    const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null;
 
     const loweredStatus = status.toLowerCase();
     const statusTone = loweredStatus.includes('failed') || loweredStatus.includes('invalid') || loweredStatus.includes('cannot')
@@ -173,6 +176,22 @@ function App() {
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
     const needsProfilesFolderFix = healthReport?.items.some((item) => item.name === 'profiles_path' && !item.ok) ?? false;
     const needsMarkerFileFix = markerHealthItem?.message.toLowerCase().includes('is missing') ?? false;
+    const hasDiagnosticErrors = healthReport?.items.some((item) => item.severity === 'error') ?? false;
+    const hasDiagnosticWarnings = healthReport?.items.some((item) => item.severity === 'warn') ?? false;
+    const diagnosticsStatusLabel = !healthReport
+        ? 'Not run yet'
+        : hasDiagnosticErrors
+            ? 'Needs attention'
+            : hasDiagnosticWarnings
+                ? 'Ready with warnings'
+                : 'Ready';
+    const diagnosticsStatusClass = !healthReport
+        ? 'diag-pending'
+        : hasDiagnosticErrors
+            ? 'diag-attention'
+            : hasDiagnosticWarnings
+                ? 'diag-warning'
+                : 'diag-ready';
     const hasActiveDestination = activeProfile.trim() !== '' && !needsMarkerFileFix;
     const selectedCustomDestination = saveDestinationProfile === NEW_PROFILE_OPTION ? saveDestinationNewName.trim() : saveDestinationProfile.trim();
     const resolvedSaveDestination = saveDestinationMode === 'active' ? activeProfile.trim() : selectedCustomDestination;
@@ -185,7 +204,7 @@ function App() {
             setSaveGamePath(paths.saveGamePath);
             setSaveGamePathInput(paths.saveGamePath);
             setProfiles(profileItems);
-            setMarkerQuickProfile((current) => {
+            setMarkerDialogProfile((current) => {
                 if (current && profileItems.some((profile) => profile.name === current)) {
                     return current;
                 }
@@ -253,7 +272,15 @@ function App() {
             setRecoveryHint('');
             const report = await RunHealthCheck();
             setHealthReport(report);
-            setStatus(report.ready ? 'Diagnostics complete: setup looks ready.' : 'Diagnostics complete: action needed.');
+            const hasErrors = report.items.some((item) => item.severity === 'error');
+            const hasWarnings = report.items.some((item) => item.severity === 'warn');
+            if (hasErrors) {
+                setStatus('Diagnostics complete: action needed.');
+            } else if (hasWarnings) {
+                setStatus('Diagnostics complete: ready with warnings.');
+            } else {
+                setStatus('Diagnostics complete: setup looks ready.');
+            }
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Diagnostics failed');
             setStatus(feedback.message);
@@ -292,7 +319,7 @@ function App() {
         }
     }
 
-    async function onEnsureProfilesFolder() {
+    async function onEnsureProfilesFolder(closeModalAfter = false) {
         try {
             setIsLoading(true);
             setStatus('Creating Profiles folder...');
@@ -300,6 +327,9 @@ function App() {
             await EnsureProfilesFolder();
             await loadData();
             setStatus('Profiles folder is ready.');
+            if (closeModalAfter) {
+                setDiagnosticsModal(null);
+            }
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Failed to create Profiles folder');
             setStatus(feedback.message);
@@ -309,8 +339,8 @@ function App() {
         }
     }
 
-    async function onCreateMarkerFile() {
-        const selectedProfile = markerQuickProfile.trim();
+    async function onCreateMarkerFile(profileName?: string) {
+        const selectedProfile = (profileName ?? markerDialogProfile).trim();
         if (!selectedProfile) {
             setStatus('Select a profile first to create active_profile.txt.');
             return;
@@ -324,6 +354,7 @@ function App() {
             setActiveProfile(selectedProfile);
             await loadData();
             setStatus(`active_profile.txt created for ${selectedProfile}.`);
+            setDiagnosticsModal(null);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Failed to create marker file');
             setStatus(feedback.message);
@@ -536,6 +567,24 @@ function App() {
         setDeleteTarget(null);
     }
 
+    function openDiagnosticsModal(action: DiagnosticsQuickAction) {
+        if (action === 'marker') {
+            setMarkerDialogProfile((current) => {
+                if (current && profiles.some((profile) => profile.name === current)) {
+                    return current;
+                }
+
+                return profiles[0]?.name ?? '';
+            });
+        }
+
+        setDiagnosticsModal(action);
+    }
+
+    function closeDiagnosticsModal() {
+        setDiagnosticsModal(null);
+    }
+
     function closeActiveModal() {
         if (renameTarget) {
             closeRenameModal();
@@ -544,6 +593,11 @@ function App() {
 
         if (deleteTarget) {
             closeDeleteModal();
+            return;
+        }
+
+        if (diagnosticsModal) {
+            closeDiagnosticsModal();
         }
     }
 
@@ -587,7 +641,7 @@ function App() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isModalOpen, isLoading, renameTarget, deleteTarget]);
+    }, [isModalOpen, isLoading, renameTarget, deleteTarget, diagnosticsModal]);
 
     return (
         <div className="app-shell">
@@ -605,8 +659,8 @@ function App() {
                     <div className="diagnostics-summary">
                         <p>
                             Status:{' '}
-                            <span className={healthReport ? (healthReport.ready ? 'diag-ready' : 'diag-attention') : 'diag-pending'}>
-                                {healthReport ? (healthReport.ready ? 'Ready' : 'Needs attention') : 'Not run yet'}
+                            <span className={diagnosticsStatusClass}>
+                                {diagnosticsStatusLabel}
                             </span>
                         </p>
                         <p>Last run: {healthReport?.checkedAt ? new Date(healthReport.checkedAt).toLocaleString() : 'Not run yet'}</p>
@@ -618,33 +672,14 @@ function App() {
                         <div className="diag-actions">
                             <h3>Quick Actions</h3>
                             {needsProfilesFolderFix && (
-                                <button className="action-btn secondary" onClick={() => void onEnsureProfilesFolder()} disabled={isLoading || isModalOpen}>
+                                <button className="action-btn secondary" onClick={() => openDiagnosticsModal('profiles')} disabled={isLoading || isModalOpen}>
                                     Create Profiles folder
                                 </button>
                             )}
                             {needsMarkerFileFix && (
-                                <>
-                                    {profiles.length > 0 ? (
-                                        <div className="field-row">
-                                            <select
-                                                value={markerQuickProfile}
-                                                onChange={(event) => setMarkerQuickProfile(event.target.value)}
-                                                disabled={isLoading || isModalOpen}
-                                            >
-                                                {profiles.map((profile) => (
-                                                    <option key={profile.name} value={profile.name}>
-                                                        {profile.name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <button className="action-btn secondary" onClick={() => void onCreateMarkerFile()} disabled={isLoading || isModalOpen || !markerQuickProfile.trim()}>
-                                                Create marker file
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <p className="field-hint">Create a profile first, then run this quick action again.</p>
-                                    )}
-                                </>
+                                <button className="action-btn secondary" onClick={() => openDiagnosticsModal('marker')} disabled={isLoading || isModalOpen}>
+                                    Set active profile
+                                </button>
                             )}
                         </div>
                     )}
@@ -652,9 +687,13 @@ function App() {
                         <ul className="health-list">
                             {healthReport.items.map((item) => (
                                 <li key={item.name} className={`health-item ${item.severity}`}>
-                                    <span className="health-icon" aria-hidden="true">
-                                        {item.severity === 'ok' ? '✓' : item.severity === 'warn' ? '!' : '✕'}
-                                    </span>
+                                    {item.severity === 'warn' ? (
+                                        <span className="health-icon triangle" aria-hidden="true" />
+                                    ) : (
+                                        <span className="health-icon circle" aria-hidden="true">
+                                            {item.severity === 'ok' ? '✓' : '✕'}
+                                        </span>
+                                    )}
                                     <strong>{item.name.replaceAll('_', ' ')}</strong>
                                     <span className="health-message">{item.message}</span>
                                 </li>
@@ -893,6 +932,83 @@ function App() {
             <footer className="footnote">
                 <p>Marker file: active_profile.txt</p>
             </footer>
+
+            {diagnosticsModal && (
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="diag-modal-title" aria-describedby="diag-modal-description">
+                    <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+                        {diagnosticsModal === 'profiles' ? (
+                            <>
+                                <h3 id="diag-modal-title">Create Profiles Folder</h3>
+                                <p id="diag-modal-description">
+                                    Diagnostics found that `SaveGame/Profiles` is missing. This action creates the folder so profile operations can work normally.
+                                </p>
+                                <div className="modal-actions">
+                                    <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
+                                        Cancel
+                                    </button>
+                                    <button className="action-btn" onClick={() => void onEnsureProfilesFolder(true)} disabled={isLoading}>
+                                        Create Profiles folder
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <h3 id="diag-modal-title">Set Active Profile</h3>
+                                <p id="diag-modal-description">
+                                    This creates `active_profile.txt` and marks which profile should be considered active for save operations.
+                                </p>
+
+                                {needsProfilesFolderFix ? (
+                                    <>
+                                        <p className="modal-note">Profiles folder is missing first. Create it, then choose an active profile.</p>
+                                        <div className="modal-actions">
+                                            <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
+                                                Cancel
+                                            </button>
+                                            <button className="action-btn" onClick={() => void onEnsureProfilesFolder()} disabled={isLoading}>
+                                                Create Profiles folder first
+                                            </button>
+                                        </div>
+                                    </>
+                                ) : profiles.length === 0 ? (
+                                    <>
+                                        <p className="modal-note">No profiles exist yet. Create one using Start New Save or Save Current Progress first.</p>
+                                        <div className="modal-actions">
+                                            <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
+                                                Close
+                                            </button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <select
+                                            value={markerDialogProfile}
+                                            onChange={(event) => setMarkerDialogProfile(event.target.value)}
+                                            disabled={isLoading}
+                                            aria-label="Choose active profile"
+                                        >
+                                            {profiles.map((profile) => (
+                                                <option key={profile.name} value={profile.name}>
+                                                    {profile.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="modal-note">Selected profile: <strong>{markerDialogProfile || 'None selected'}</strong></p>
+                                        <div className="modal-actions">
+                                            <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
+                                                Cancel
+                                            </button>
+                                            <button className="action-btn" onClick={() => void onCreateMarkerFile(markerDialogProfile)} disabled={isLoading || !markerDialogProfile.trim()}>
+                                                Set active profile
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {renameTarget && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="rename-modal-title" aria-describedby="rename-modal-description">
