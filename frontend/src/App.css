@@ -519,7 +519,16 @@ select option {
 }
 
 .bundle-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.import-row {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.import-row .action-btn {
+    justify-self: start;
+    min-width: 120px;
 }
 
 .field-row input {
@@ -543,6 +552,17 @@ select option {
 
 .field-row input::placeholder {
     color: var(--text-muted);
+}
+
+.field-row input:focus,
+.field-row select:focus,
+.save-destination-grid input:focus,
+.save-destination-grid select:focus,
+.modal-card input:focus,
+.modal-card select:focus {
+    outline: none;
+    border-color: rgba(255, 168, 103, 0.8);
+    box-shadow: 0 0 0 2px rgba(255, 168, 103, 0.22);
 }
 
 .field-row input:disabled,
