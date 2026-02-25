@@ -370,6 +370,71 @@ select option {
     grid-template-columns: 1fr auto;
 }
 
+.save-mode-row {
+    display: grid;
+    gap: 0.45rem;
+    margin-top: 0.2rem;
+}
+
+.save-mode-option {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--text-main);
+    font-size: 0.9rem;
+}
+
+.save-mode-option input {
+    margin: 0;
+    appearance: none;
+    width: 0.95rem;
+    height: 0.95rem;
+    border: 1px solid rgba(162, 181, 200, 0.45);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.06);
+    display: inline-grid;
+    place-content: center;
+    cursor: pointer;
+}
+
+.save-mode-option input::before {
+    content: '';
+    width: 0.52rem;
+    height: 0.52rem;
+    transform: scale(0);
+    transition: transform 120ms ease-in-out;
+    background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+    border-radius: 2px;
+}
+
+.save-mode-option input:checked::before {
+    transform: scale(1);
+}
+
+.save-mode-option input:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.save-destination-grid {
+    display: grid;
+    gap: 0.6rem;
+    margin-top: 0.55rem;
+}
+
+.save-current-group .save-mode-row {
+    margin-top: 0.45rem;
+    margin-bottom: 0.45rem;
+}
+
+.save-current-group .field-hint {
+    margin-top: 0.7rem;
+}
+
+.save-current-group .field-row {
+    margin-top: 0.75rem;
+}
+
 .setup-group + .setup-group {
     margin-top: 0.95rem;
     padding-top: 0.95rem;
@@ -412,6 +477,17 @@ select option {
 .action-btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+}
+
+.save-destination-grid input,
+.save-destination-grid select {
+    min-width: 0;
+    border: 1px solid rgba(162, 181, 200, 0.25);
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-main);
+    color-scheme: dark;
 }
 
 .field-hint {
