@@ -41,7 +41,7 @@ type ErrorFeedback = {
     hint: string;
 };
 
-type DiagnosticsQuickAction = 'profiles' | 'marker';
+type DiagnosticsQuickAction = 'profiles' | 'marker' | 'firstSave';
 
 const NEW_PROFILE_OPTION = '__new__';
 
@@ -156,6 +156,7 @@ function App() {
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
     const [markerDialogProfile, setMarkerDialogProfile] = useState('');
     const [diagnosticsModal, setDiagnosticsModal] = useState<DiagnosticsQuickAction | null>(null);
+    const [firstSaveProfileName, setFirstSaveProfileName] = useState('');
     const [isBundleExpanded, setIsBundleExpanded] = useState(false);
     const [selectedProfileName, setSelectedProfileName] = useState('');
     const saveActionsRef = useRef<HTMLDivElement | null>(null);
@@ -591,12 +592,35 @@ function App() {
         setDiagnosticsModal(null);
     }
 
-    function jumpToSaveCurrentSetup() {
-        setSaveDestinationMode('custom');
-        setSaveDestinationProfile(NEW_PROFILE_OPTION);
-        setStatus('Choose a new profile name in Save Current Progress to capture your existing save.');
-        setDiagnosticsModal(null);
-        saveActionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    async function onSaveCurrentFromModal() {
+        const profileName = firstSaveProfileName.trim();
+        if (!profileName) {
+            setStatus('Enter a profile name before saving current progress.');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            setStatus(`Saving current root data into ${profileName}...`);
+            setRecoveryHint('');
+            await SaveCurrentProfile(profileName);
+
+            if (!activeProfile.trim() && needsMarkerFileFix && profiles.length === 0) {
+                await CreateMarkerFile(profileName);
+                setActiveProfile(profileName);
+            }
+
+            await loadData();
+            setDiagnosticsModal(null);
+            setFirstSaveProfileName('');
+            setStatus(`Current root save exported to ${profileName} and set as active profile.`);
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Save current failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        } finally {
+            setIsLoading(false);
+        }
     }
 
     function closeActiveModal() {
@@ -663,6 +687,9 @@ function App() {
                 <p className="eyebrow">Need for Speed Heat</p>
                 <h1>Heat Save Manager</h1>
                 <p className="current-profile">Current Profile: <strong>{activeProfile || 'None selected'}</strong></p>
+                <button className="top-refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
+                    ↻ Refresh
+                </button>
                 <p className={`status ${statusTone}`}>{status}</p>
                 {recoveryHint && <p className="status-hint">Tip: {recoveryHint}</p>}
             </header>
@@ -685,13 +712,14 @@ function App() {
                     {(needsProfilesFolderFix || needsMarkerFileFix) && (
                         <div className="diag-actions">
                             <h3>Quick Actions</h3>
+                            <p className="diag-callout">Action required: use a quick action below to continue setup.</p>
                             {needsProfilesFolderFix && (
-                                <button className="action-btn secondary" onClick={() => openDiagnosticsModal('profiles')} disabled={isLoading || isModalOpen}>
+                                <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('profiles')} disabled={isLoading || isModalOpen}>
                                     Create Profiles folder
                                 </button>
                             )}
                             {needsMarkerFileFix && (
-                                <button className="action-btn secondary" onClick={() => openDiagnosticsModal('marker')} disabled={isLoading || isModalOpen}>
+                                <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('marker')} disabled={isLoading || isModalOpen}>
                                     Set active profile
                                 </button>
                             )}
@@ -718,9 +746,6 @@ function App() {
 
                 <section className="panel primary-panel">
                     <div className="panel-block">
-                        <button className="refresh-btn" onClick={() => void loadData()} disabled={isLoading || isModalOpen}>
-                            {isLoading ? 'Refreshing...' : 'Refresh'}
-                        </button>
                         <div className="panel-header-row">
                             <h2>Profiles</h2>
                             <span className="field-hint">Active: {activeProfile || 'None selected'}</span>
@@ -796,7 +821,7 @@ function App() {
                                         onChange={() => setSaveDestinationMode('active')}
                                         disabled={isLoading || isModalOpen || !hasActiveDestination}
                                     />
-                                    <span>Use active ({activeProfile || 'none'})</span>
+                                    <span className={!hasActiveDestination ? 'disabled-option' : ''}>{hasActiveDestination ? `Use active (${activeProfile})` : 'Use active (not available)'}</span>
                                 </label>
                                 <label className="save-mode-option">
                                     <input
@@ -965,6 +990,28 @@ function App() {
                                     </button>
                                 </div>
                             </>
+                        ) : diagnosticsModal === 'firstSave' ? (
+                            <>
+                                <h3 id="diag-modal-title">Save Current Progress First</h3>
+                                <p id="diag-modal-description">
+                                    Create your first profile from the current game state. This will also set it as active.
+                                </p>
+                                <input
+                                    value={firstSaveProfileName}
+                                    onChange={(event) => setFirstSaveProfileName(event.target.value)}
+                                    placeholder="New profile name"
+                                    disabled={isLoading}
+                                    autoFocus
+                                />
+                                <div className="modal-actions">
+                                    <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
+                                        Cancel
+                                    </button>
+                                    <button className="action-btn" onClick={() => void onSaveCurrentFromModal()} disabled={isLoading || !firstSaveProfileName.trim()}>
+                                        Save Current Progress
+                                    </button>
+                                </div>
+                            </>
                         ) : (
                             <>
                                 <h3 id="diag-modal-title">Set Active Profile</h3>
@@ -988,7 +1035,7 @@ function App() {
                                     <>
                                         <p className="modal-note">No profiles exist yet. Create one using Start New Save or Save Current Progress first.</p>
                                         <div className="modal-actions">
-                                            <button className="action-btn" onClick={jumpToSaveCurrentSetup} disabled={isLoading}>
+                                            <button className="action-btn" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
                                                 Save Current Progress first
                                             </button>
                                             <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>

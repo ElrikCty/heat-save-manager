@@ -53,6 +53,24 @@
     color: var(--text-main);
 }
 
+.top-refresh-btn {
+    margin: 0.25rem 0 0.55rem;
+    align-self: flex-start;
+    border: 1px solid rgba(162, 181, 200, 0.35);
+    border-radius: 999px;
+    padding: 0.35rem 0.72rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+}
+
+.top-refresh-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 .status.ok {
     color: var(--success);
 }
@@ -200,6 +218,30 @@
 .diag-actions h3 {
     margin: 0;
     font-size: 0.9rem;
+}
+
+.diag-callout {
+    margin: 0;
+    color: #ffd08b;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.action-btn.attention {
+    box-shadow: 0 0 0 0 rgba(255, 208, 139, 0.55);
+    animation: pulse-attention 1.65s ease-out infinite;
+}
+
+@keyframes pulse-attention {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 208, 139, 0.55);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(255, 208, 139, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 208, 139, 0);
+    }
 }
 
 .dashboard {
@@ -440,6 +482,11 @@ select option {
 .save-mode-option input:disabled {
     cursor: not-allowed;
     opacity: 0.55;
+}
+
+.disabled-option {
+    color: rgba(191, 205, 220, 0.68);
+    text-decoration: line-through;
 }
 
 .save-destination-grid {
