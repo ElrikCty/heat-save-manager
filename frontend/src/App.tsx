@@ -973,7 +973,7 @@ function App() {
                                         ))}
                                     </select>
                                     {selectedProfileName && activeProfile && selectedProfileName === activeProfile && (
-                                        <span className="profile-active-tag" style={{left: `calc(0.92rem + ${Math.min(selectedProfileName.length+1, 16)}ch)`}}>
+                                        <span className="profile-active-tag" style={{left: `calc(0.92rem + ${Math.min(selectedProfileName.length + 2, 16)}ch)`}}>
                                             ACTIVE
                                         </span>
                                     )}
