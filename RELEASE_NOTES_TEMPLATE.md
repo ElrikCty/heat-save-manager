@@ -17,9 +17,11 @@ Full Changelog: https://github.com/ElrikCty/heat-save-manager/compare/<previous_
 ## Verification
 
 - Windows executable: `HeatSaveManager-vX.Y.Z-windows-x64.exe`
+- Windows installer: `HeatSaveManager-vX.Y.Z-windows-x64-installer.exe`
 - Windows zip: `HeatSaveManager-vX.Y.Z-windows-x64.zip`
 - Checksums:
   - `HeatSaveManager-vX.Y.Z-windows-x64.exe.sha256`
+  - `HeatSaveManager-vX.Y.Z-windows-x64-installer.exe.sha256`
   - `HeatSaveManager-vX.Y.Z-windows-x64.zip.sha256`
 
 ### Verify SHA256 (PowerShell)

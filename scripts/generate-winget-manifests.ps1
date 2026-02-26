@@ -7,6 +7,7 @@ param(
     [string]$PackageName = 'Heat Save Manager',
     [string]$License = 'MIT',
     [string]$ShortDescription = 'Desktop app to manage Need for Speed Heat save profiles on Windows.',
+    [string]$CommandAlias = 'HeatSaveManager',
     [string]$Repo = 'ElrikCty/heat-save-manager'
 )
 
@@ -39,6 +40,11 @@ if ($installerSha256.Length -ne 64) {
     throw "Invalid SHA256 value from checksum file: $installerSha256"
 }
 
+$commandAliasTrimmed = $CommandAlias.Trim()
+if (-not $commandAliasTrimmed) {
+    throw "CommandAlias must not be empty"
+}
+
 $segments = $PackageIdentifier.Split('.')
 if ($segments.Length -lt 2) {
     throw "PackageIdentifier must include vendor and package (example: ElrikCty.HeatSaveManager)"
@@ -65,7 +71,9 @@ $installerManifest = @"
 # Created with scripts/generate-winget-manifests.ps1
 PackageIdentifier: $PackageIdentifier
 PackageVersion: $version
-InstallerType: exe
+InstallerType: portable
+Commands:
+  - $commandAliasTrimmed
 Installers:
   - Architecture: x64
     InstallerUrl: $($exeAsset.browser_download_url)

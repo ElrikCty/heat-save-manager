@@ -55,6 +55,7 @@ Heat Save Manager helps you switch, back up, and organize NFS Heat saves with gu
 
 - Open: `https://github.com/ElrikCty/heat-save-manager/releases/latest`
 - Assets include:
+  - `HeatSaveManager-vX.Y.Z-windows-x64-installer.exe`
   - `HeatSaveManager-vX.Y.Z-windows-x64.exe`
   - `HeatSaveManager-vX.Y.Z-windows-x64.zip`
   - matching `.sha256` files
