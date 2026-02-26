@@ -41,6 +41,7 @@ Switch between save profiles safely from a desktop UI, with backup and rollback 
 - Defender false-positive playbook: `DEFENDER_SUBMISSION.md`
 - Winget release flow: `WINGET_RELEASE.md`
 - Winget manifest helpers: `scripts\generate-winget-manifests.cmd` or `./scripts/generate-winget-manifests.ps1 -Tag vX.Y.Z`
+- Release notes helper: `scripts\generate-release-notes.cmd -Tag vX.Y.Z`
 - Run app in development mode: `wails dev`
 - Build distributable app: `wails build`
 - Validate frontend changes: `npm run build --prefix frontend`
