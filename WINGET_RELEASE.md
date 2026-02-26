@@ -30,6 +30,7 @@ Generated files are written under:
 1. Fork `microsoft/winget-pkgs`
 2. Copy generated manifest folder into the same path structure in your fork
 3. Open a PR to `microsoft/winget-pkgs`
+   - Optional helper text: `WINGET_PR_TEMPLATE.md`
 4. Address Winget validation bot comments if any
 
 ## User install command (after merge)
