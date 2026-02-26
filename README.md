@@ -30,6 +30,7 @@ Switch between save profiles safely from a desktop UI, with backup and rollback 
 
 - Fast local verification (generate bindings + frontend build + backend tests): `scripts\verify.cmd`
 - PowerShell variant: `./scripts/verify.ps1`
+- Release workflow checklist: `RELEASE_CHECKLIST.md`
 - Run app in development mode: `wails dev`
 - Build distributable app: `wails build`
 - Validate frontend changes: `npm run build --prefix frontend`
