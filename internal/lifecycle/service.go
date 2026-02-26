@@ -51,6 +51,14 @@ func NewService(saveGamePath string, profilesPath string, marker MarkerStore, op
 }
 
 func (s *Service) PrepareFreshProfile(profileName string) error {
+	return s.prepareFreshProfile(profileName, true)
+}
+
+func (s *Service) PrepareFreshProfileWithoutSave(profileName string) error {
+	return s.prepareFreshProfile(profileName, false)
+}
+
+func (s *Service) prepareFreshProfile(profileName string, preserveCurrent bool) error {
 	name, err := validateProfileName(profileName)
 	if err != nil {
 		return err
@@ -60,8 +68,10 @@ func (s *Service) PrepareFreshProfile(profileName string) error {
 		return err
 	}
 
-	if err := s.SaveCurrentProfile(name); err != nil {
-		return err
+	if preserveCurrent {
+		if err := s.SaveCurrentProfile(name); err != nil {
+			return err
+		}
 	}
 
 	if err := clearDirContents(filepath.Join(s.saveGamePath, savegameDirName)); err != nil {
@@ -70,6 +80,12 @@ func (s *Service) PrepareFreshProfile(profileName string) error {
 
 	if err := clearDirContents(filepath.Join(s.saveGamePath, wrapsDirName)); err != nil {
 		return err
+	}
+
+	if !preserveCurrent {
+		if err := s.SaveCurrentProfile(name); err != nil {
+			return err
+		}
 	}
 
 	return s.marker.WriteActiveProfile(name)
