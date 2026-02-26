@@ -6,6 +6,10 @@ Use this checklist for every production release.
 
 - [ ] Sync branch and confirm a clean working tree (`git status`)
 - [ ] Confirm target version (`vX.Y.Z`) and planned scope
+- [ ] Optional: confirm code-signing secrets are configured in GitHub repo settings:
+  - `WINDOWS_CODESIGN_CERT_BASE64`
+  - `WINDOWS_CODESIGN_PASSWORD`
+  - optional variable: `WINDOWS_CODESIGN_TIMESTAMP_URL`
 
 ## 2) Validate
 
@@ -23,10 +27,16 @@ Use this checklist for every production release.
 - [ ] Draft release notes (highlights, fixes, breaking changes if any)
 - [ ] Publish the GitHub release (workflow auto-builds and uploads Windows asset)
 - [ ] Verify `Release Assets` workflow completed successfully
+- [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.exe`
 - [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.zip`
+- [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.exe.sha256`
+- [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.zip.sha256`
 - [ ] Verify download link works
 
 ## 5) Post-release
 
 - [ ] Smoke test the released build on target platform
+- [ ] If flagged, submit to Microsoft Defender using `DEFENDER_SUBMISSION.md`
+- [ ] Generate Winget manifests: `./scripts/generate-winget-manifests.ps1 -Tag vX.Y.Z`
+- [ ] Open/refresh PR on `microsoft/winget-pkgs`
 - [ ] Create follow-up issues for anything deferred
