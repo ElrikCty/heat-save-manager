@@ -544,7 +544,7 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
 .profile-active-tag {
     position: absolute;
     left: 3.95rem;
-    margin-left: 0.4rem;
+    margin-left: 0.64rem;
     top: 50%;
     transform: translateY(-50%);
     font-size: 0.6rem;
@@ -553,7 +553,7 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     color: #ffb565;
     border: none;
     background: rgba(255, 132, 40, 0.32);
-    padding: 0.22rem 0.46rem;
+    padding: 0.22rem 0.52rem;
     border-radius: 3px;
     line-height: 1;
     pointer-events: none;
