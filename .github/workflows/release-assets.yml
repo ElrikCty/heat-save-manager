@@ -34,6 +34,12 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
+      - name: Install NSIS
+        shell: powershell
+        run: |
+          choco install nsis -y --no-progress
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -96,16 +102,26 @@ jobs:
             throw "TAG_NAME is missing"
           }
 
+          wails build -platform windows/amd64 -nosyncgomod -m -nsis -s -ldflags "-X main.appVersion=$env:TAG_NAME"
+
           $zipAssetName = "HeatSaveManager-$env:TAG_NAME-windows-x64.zip"
           $zipAssetPath = "build/bin/$zipAssetName"
           $exeAssetName = "HeatSaveManager-$env:TAG_NAME-windows-x64.exe"
           $exeAssetPath = "build/bin/$exeAssetName"
+          $installerSourcePath = "build/bin/HeatSaveManager-amd64-installer.exe"
+          $installerAssetName = "HeatSaveManager-$env:TAG_NAME-windows-x64-installer.exe"
+          $installerAssetPath = "build/bin/$installerAssetName"
 
           if (-not (Test-Path "build/bin/HeatSaveManager.exe")) {
             throw "Expected build/bin/HeatSaveManager.exe was not found"
           }
 
+          if (-not (Test-Path $installerSourcePath)) {
+            throw "Expected installer output not found at $installerSourcePath"
+          }
+
           Copy-Item "build/bin/HeatSaveManager.exe" $exeAssetPath -Force
+          Copy-Item $installerSourcePath $installerAssetPath -Force
           Compress-Archive -Path "build/bin/HeatSaveManager.exe" -DestinationPath $zipAssetPath -Force
 
           $zipChecksumName = "$zipAssetName.sha256"
@@ -118,10 +134,17 @@ jobs:
           $exeHash = (Get-FileHash -Algorithm SHA256 $exeAssetPath).Hash.ToLowerInvariant()
           "$exeHash  $exeAssetName" | Out-File -FilePath $exeChecksumPath -Encoding ascii
 
+          $installerChecksumName = "$installerAssetName.sha256"
+          $installerChecksumPath = "build/bin/$installerChecksumName"
+          $installerHash = (Get-FileHash -Algorithm SHA256 $installerAssetPath).Hash.ToLowerInvariant()
+          "$installerHash  $installerAssetName" | Out-File -FilePath $installerChecksumPath -Encoding ascii
+
           "ZIP_ASSET_NAME=$zipAssetName" | Out-File -FilePath $env:GITHUB_ENV -Append
           "ZIP_CHECKSUM_NAME=$zipChecksumName" | Out-File -FilePath $env:GITHUB_ENV -Append
           "EXE_ASSET_NAME=$exeAssetName" | Out-File -FilePath $env:GITHUB_ENV -Append
           "EXE_CHECKSUM_NAME=$exeChecksumName" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "INSTALLER_ASSET_NAME=$installerAssetName" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "INSTALLER_CHECKSUM_NAME=$installerChecksumName" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload asset to GitHub release
         env:
@@ -149,10 +172,20 @@ jobs:
             throw "EXE_CHECKSUM_NAME is missing"
           }
 
+          if (-not $env:INSTALLER_ASSET_NAME) {
+            throw "INSTALLER_ASSET_NAME is missing"
+          }
+
+          if (-not $env:INSTALLER_CHECKSUM_NAME) {
+            throw "INSTALLER_CHECKSUM_NAME is missing"
+          }
+
           $zipAssetPath = "build/bin/$env:ZIP_ASSET_NAME"
           $zipChecksumPath = "build/bin/$env:ZIP_CHECKSUM_NAME"
           $exeAssetPath = "build/bin/$env:EXE_ASSET_NAME"
           $exeChecksumPath = "build/bin/$env:EXE_CHECKSUM_NAME"
+          $installerAssetPath = "build/bin/$env:INSTALLER_ASSET_NAME"
+          $installerChecksumPath = "build/bin/$env:INSTALLER_CHECKSUM_NAME"
 
           if (-not (Test-Path $zipAssetPath)) {
             throw "Expected zip asset not found at $zipAssetPath"
@@ -170,6 +203,14 @@ jobs:
             throw "Expected exe checksum file not found at $exeChecksumPath"
           }
 
+          if (-not (Test-Path $installerAssetPath)) {
+            throw "Expected installer asset not found at $installerAssetPath"
+          }
+
+          if (-not (Test-Path $installerChecksumPath)) {
+            throw "Expected installer checksum file not found at $installerChecksumPath"
+          }
+
           $maxAttempts = 6
           for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
             gh release view "$env:TAG_NAME" --repo "$env:GH_REPO" | Out-Null
@@ -184,4 +225,4 @@ jobs:
             Start-Sleep -Seconds 10
           }
 
-          gh release upload "$env:TAG_NAME" "$zipAssetPath" "$zipChecksumPath" "$exeAssetPath" "$exeChecksumPath" --clobber --repo "$env:GH_REPO"
+          gh release upload "$env:TAG_NAME" "$zipAssetPath" "$zipChecksumPath" "$exeAssetPath" "$exeChecksumPath" "$installerAssetPath" "$installerChecksumPath" --clobber --repo "$env:GH_REPO"

@@ -31,8 +31,10 @@ Use this checklist for every production release.
 - [ ] If no release-triggered run appears, manually dispatch it:
   - `gh workflow run .github/workflows/release-assets.yml -f tag=vX.Y.Z`
 - [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.exe`
+- [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64-installer.exe`
 - [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.zip`
 - [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.exe.sha256`
+- [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64-installer.exe.sha256`
 - [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.zip.sha256`
 - [ ] Verify download link works
 
