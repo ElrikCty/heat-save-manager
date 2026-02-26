@@ -40,4 +40,5 @@ Switch between save profiles safely from a desktop UI, with backup and rollback 
 - Line endings are normalized with `.gitattributes` and `.editorconfig` to reduce CRLF/LF-only diffs.
 - `frontend/wailsjs/` is generated and ignored by git; regenerate it locally with `scripts\verify.cmd` or `wails dev`.
 - Use `wails build -nosyncgomod -m` for binding refresh to avoid unintended `go.mod` churn.
+- CI validates that `frontend/wailsjs/` stays untracked and that validation steps leave a clean git tree.
 - See `CONTRIBUTING.md` for PR checklist and commit scope guidance.

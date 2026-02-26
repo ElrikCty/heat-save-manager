@@ -20,6 +20,7 @@ Equivalent manual commands:
 - `frontend/wailsjs/` is intentionally ignored and should not be committed.
 - If bindings are missing locally, regenerate them with `scripts\verify.cmd`.
 - Prefer `-nosyncgomod -m` on Wails build commands to avoid unnecessary `go.mod` churn.
+- CI enforces this policy by failing if `frontend/wailsjs/` is tracked or if checks leave the repo dirty.
 
 ## Commit Scope
 

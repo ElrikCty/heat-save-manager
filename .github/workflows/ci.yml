@@ -31,8 +31,28 @@ jobs:
         run: npm ci
         working-directory: frontend
 
+      - name: Verify generated bindings policy
+        run: |
+          if [ -n "$(git ls-files frontend/wailsjs)" ]; then
+            echo "::error::frontend/wailsjs must not be tracked by git."
+            git ls-files frontend/wailsjs
+            exit 1
+          fi
+          if ! git check-ignore -q frontend/wailsjs/go/main/App.js; then
+            echo "::error::frontend/wailsjs is expected to be ignored by .gitignore."
+            exit 1
+          fi
+
       - name: Build frontend
         run: npm run build --prefix frontend
 
       - name: Run Go tests
         run: go test ./...
+
+      - name: Verify clean working tree
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Repository became dirty during CI checks."
+            git status --short
+            exit 1
+          fi
