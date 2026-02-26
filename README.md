@@ -1,58 +1,122 @@
-# Heat Save Manager
+<h1 align="center">Heat Save Manager</h1>
 
-Desktop app to manage Need for Speed Heat save profiles on Windows.
+<p align="center">
+  A safer desktop manager for Need for Speed Heat save profiles on Windows.
+</p>
 
-## Install (Winget)
+<p align="center">
+  <a href="https://github.com/ElrikCty/heat-save-manager/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/ElrikCty/heat-save-manager?sort=semver"></a>
+  <a href="https://github.com/ElrikCty/heat-save-manager/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/ElrikCty/heat-save-manager/ci.yml?branch=main&label=ci"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/ElrikCty/heat-save-manager"></a>
+</p>
 
-After the package is published to Winget:
+<p align="center">
+  <a href="https://github.com/ElrikCty/heat-save-manager/releases/latest">Download Latest Release</a>
+  ·
+  <a href="#install">Install</a>
+  ·
+  <a href="#development">Development</a>
+  ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+Heat Save Manager helps you switch, back up, and organize NFS Heat saves with guardrails: profile checks, backup/rollback behavior, startup diagnostics, and guided quick actions.
+
+## Contents
+
+- [Why this project](#why-this-project)
+- [Features](#features)
+- [Install](#install)
+- [Verify integrity (SHA256)](#verify-integrity-sha256)
+- [Settings](#settings)
+- [Development](#development)
+- [Release and distribution docs](#release-and-distribution-docs)
+- [Repository hygiene](#repository-hygiene)
+
+## Why this project
+
+- Prevent accidental save loss during profile switching
+- Keep profile setup simple (`Profiles/<name>` + active marker)
+- Surface setup issues quickly with diagnostics and one-click actions
+- Notify users when a newer app release is available
+
+## Features
+
+- Profile switching with backup and rollback safety
+- Create, rename, delete profiles (active-profile deletion blocked)
+- Active marker management via `active_profile.txt`
+- Start New Save with optional preserve-current flow
+- Startup diagnostics and remediation quick actions
+- In-app update banner with release/download links
+
+## Install
+
+### Option 1: Download from Releases
+
+- Open: `https://github.com/ElrikCty/heat-save-manager/releases/latest`
+- Assets include:
+  - `HeatSaveManager-vX.Y.Z-windows-x64.exe`
+  - `HeatSaveManager-vX.Y.Z-windows-x64.zip`
+  - matching `.sha256` files
+
+> [!NOTE]
+> If Windows SmartScreen warns on first run, click `More info` then `Run anyway`.
+
+### Option 2: Winget (after package publication)
 
 - `winget install --id ElrikCty.HeatSaveManager`
 
-## Stack
+## Verify integrity (SHA256)
+
+```powershell
+$version = "vX.Y.Z"
+$file = "HeatSaveManager-$version-windows-x64.exe"
+$expected = (Invoke-WebRequest -UseBasicParsing "https://github.com/ElrikCty/heat-save-manager/releases/download/$version/$file.sha256").Content.Split()[0].ToLower()
+$actual = (Get-FileHash -Algorithm SHA256 ".\$file").Hash.ToLower()
+if ($expected -eq $actual) { "OK: checksum matches" } else { "ERROR: checksum mismatch" }
+```
+
+## Settings
+
+- SaveGame path is auto-discovered, with manual override support
+- Custom path is persisted across launches
+- Config file location: `%AppData%/HeatSaveManager/config.json`
+- Manual path must point to the `SaveGame` directory
+
+## Tech stack
 
 - Go
 - Wails v2
 - React + TypeScript + Vite
 
-## Goal
-
-Switch between save profiles safely from a desktop UI, with backup and rollback support.
-
-## Planned MVP
-
-- Discover `SaveGame` path automatically (with manual override)
-- Manage profiles in `Profiles/<name>`
-- Track active profile using `active_profile.txt`
-- Switch profile with prechecks, backup, and rollback on failure
-- Create, rename, and delete profiles (active profile deletion blocked)
-
-## Settings
-
-- Custom `SaveGame` path is persisted between launches
-- Settings file location: `%AppData%/HeatSaveManager/config.json`
-- Manual path must point directly to the `SaveGame` directory
-
 ## Development
 
-- Fast local verification (generate bindings + frontend build + backend tests): `scripts\verify.cmd`
-- PowerShell variant: `./scripts/verify.ps1`
-- Release workflow checklist: `RELEASE_CHECKLIST.md`
-- Release notes template: `RELEASE_NOTES_TEMPLATE.md`
-- Defender false-positive playbook: `DEFENDER_SUBMISSION.md`
-- Winget release flow: `WINGET_RELEASE.md`
-- Winget manifest helpers: `scripts\generate-winget-manifests.cmd` or `./scripts/generate-winget-manifests.ps1 -Tag vX.Y.Z`
-- Run app in development mode: `wails dev`
-- Build distributable app: `wails build`
-- Validate frontend changes: `npm run build --prefix frontend`
-- Validate backend changes: `go test ./...`
+- Full verify: `scripts\verify.cmd`
+- PowerShell verify: `./scripts/verify.ps1`
+- Run app in dev mode: `wails dev`
+- Build app: `wails build`
+- Frontend check: `npm run build --prefix frontend`
+- Backend tests: `go test ./...`
 
-### Repository Hygiene
+## Release and distribution docs
 
-- Line endings are normalized with `.gitattributes` and `.editorconfig` to reduce CRLF/LF-only diffs.
-- `frontend/wailsjs/` is generated and ignored by git; regenerate it locally with `scripts\verify.cmd` or `wails dev`.
-- Use `wails build -nosyncgomod -m` for binding refresh to avoid unintended `go.mod` churn.
-- CI validates that `frontend/wailsjs/` stays untracked and that validation steps leave a clean git tree.
-- Release binaries are generated in `.github/workflows/release-assets.yml`; signing is applied automatically when certificate secrets are configured.
-- Each release publishes `.exe` and `.zip` assets plus `.sha256` checksum files for download verification.
-- Winget manifests can be generated with `scripts/generate-winget-manifests.ps1` after release publish.
-- See `CONTRIBUTING.md` for PR checklist and commit scope guidance.
+- `RELEASE_CHECKLIST.md`
+- `RELEASE_NOTES_TEMPLATE.md`
+- `DEFENDER_SUBMISSION.md`
+- `WINGET_RELEASE.md`
+- `WINGET_PR_TEMPLATE.md`
+
+Helpers:
+
+- Release notes: `scripts\generate-release-notes.cmd -Tag vX.Y.Z`
+- Winget manifests: `scripts\generate-winget-manifests.cmd -Tag vX.Y.Z`
+
+## Repository hygiene
+
+- `frontend/wailsjs/` is generated and intentionally ignored
+- Prefer `wails build -nosyncgomod -m` for binding refresh
+- CI enforces clean-tree and generated-file policy
+
+## Contributing
+
+See `CONTRIBUTING.md` for branch, PR, and validation expectations.
