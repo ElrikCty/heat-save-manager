@@ -27,3 +27,8 @@ Equivalent manual commands:
 - Keep commits focused (feature changes vs tooling/docs updates).
 - Prefer separate commits when changing UI behavior and repository/tooling configuration.
 - Do not include unrelated local environment changes in PRs.
+
+## Automation
+
+- Dependabot is enabled for Go modules, frontend npm deps, and GitHub Actions.
+- PRs use `.github/pull_request_template.md` to enforce local validation and hygiene checks.
