@@ -91,12 +91,17 @@ if ($expected -eq $actual) { "OK: checksum matches" } else { "ERROR: checksum mi
 
 ## Development
 
-- Full verify: `scripts\verify.cmd`
-- PowerShell verify: `./scripts/verify.ps1`
-- Run app in dev mode: `wails dev`
-- Build app: `wails build`
-- Frontend check: `npm run build --prefix frontend`
-- Backend tests: `go test ./...`
+- Fast local verification (bindings + frontend build + backend tests): `scripts\verify.cmd`
+- PowerShell variant: `./scripts/verify.ps1`
+- Run app in development mode: `wails dev`
+- Build distributable app: `wails build`
+- Validate frontend changes: `npm run build --prefix frontend`
+- Validate backend changes: `go test ./...`
+
+Maintainer helpers:
+
+- Release notes helper: `scripts\generate-release-notes.cmd -Tag vX.Y.Z`
+- Winget manifests helper: `scripts\generate-winget-manifests.cmd -Tag vX.Y.Z`
 
 ## Release and distribution docs
 
@@ -105,11 +110,6 @@ if ($expected -eq $actual) { "OK: checksum matches" } else { "ERROR: checksum mi
 - `DEFENDER_SUBMISSION.md`
 - `WINGET_RELEASE.md`
 - `WINGET_PR_TEMPLATE.md`
-
-Helpers:
-
-- Release notes: `scripts\generate-release-notes.cmd -Tag vX.Y.Z`
-- Winget manifests: `scripts\generate-winget-manifests.cmd -Tag vX.Y.Z`
 
 ## Repository hygiene
 
