@@ -33,4 +33,8 @@ Equivalent manual commands:
 - Dependabot is enabled for Go modules, frontend npm deps, and GitHub Actions.
 - PRs use `.github/pull_request_template.md` to enforce local validation and hygiene checks.
 - Releases should follow `RELEASE_CHECKLIST.md`.
-- GitHub release publishing runs `.github/workflows/release-assets.yml` to build and upload the Windows zip automatically.
+- GitHub release publishing runs `.github/workflows/release-assets.yml` to build and upload Windows release assets automatically.
+- If code-signing secrets are configured (`WINDOWS_CODESIGN_CERT_BASE64`, `WINDOWS_CODESIGN_PASSWORD`), release binaries are Authenticode-signed automatically.
+- Release publishing uploads `.exe` and `.zip` assets, each with a `.sha256` checksum file for verification.
+- For Defender false positives, follow `DEFENDER_SUBMISSION.md`.
+- For Winget publication, generate manifests with `scripts/generate-winget-manifests.ps1` and follow `WINGET_RELEASE.md`.

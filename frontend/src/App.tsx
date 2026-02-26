@@ -2,8 +2,10 @@ import {useEffect, useRef, useState} from 'react';
 import {AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CircleX, Download, Edit3, FileText, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Save, Trash2, Upload, Zap} from 'lucide-react';
 import './App.css';
 import {
+    CheckForUpdates,
     CreateMarkerFile,
     DeleteProfile,
+    GetAppVersion,
     EnsureProfilesFolder,
     ExportProfileBundle,
     GetActiveProfile,
@@ -13,6 +15,7 @@ import {
     PickImportBundlePath,
     PrepareFreshProfile,
     PrepareFreshProfileWithoutSave,
+    OpenExternalURL,
     RenameProfile,
     SaveCurrentProfile,
     SetSaveGamePath,
@@ -35,6 +38,16 @@ type HealthReport = {
     ready: boolean;
     checkedAt: string;
     items: HealthItem[];
+};
+
+type UpdateInfo = {
+    currentVersion: string;
+    latestVersion: string;
+    updateAvailable: boolean;
+    releaseUrl: string;
+    downloadUrl: string;
+    publishedAt: string;
+    notes: string;
 };
 
 type ErrorFeedback = {
@@ -190,6 +203,9 @@ function App() {
     const [selectedProfileName, setSelectedProfileName] = useState('');
     const [toastMessage, setToastMessage] = useState('');
     const [toastKind, setToastKind] = useState<ToastKind>('success');
+    const [appVersion, setAppVersion] = useState('');
+    const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+    const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
     const saveActionsRef = useRef<HTMLDivElement | null>(null);
     const importNewProfileRef = useRef<HTMLInputElement | null>(null);
     const toastTimerRef = useRef<number | null>(null);
@@ -342,6 +358,36 @@ function App() {
             setRecoveryHint(feedback.hint);
         } finally {
             setIsLoading(false);
+        }
+    }
+
+    async function checkForUpdates() {
+        try {
+            const [version, info] = await Promise.all([GetAppVersion(), CheckForUpdates()]);
+            setAppVersion(version);
+            setUpdateInfo(info);
+            setIsUpdateDismissed(false);
+            if (info.updateAvailable) {
+                showToast(`Update available: ${info.latestVersion}`, 'info');
+            }
+        } catch {
+            // Ignore update-check failures to avoid noisy startup UX.
+        }
+    }
+
+    async function onOpenUpdateLink(url: string, label: string) {
+        const trimmed = url.trim();
+        if (!trimmed) {
+            return;
+        }
+
+        try {
+            await OpenExternalURL(trimmed);
+            setStatus(`Opening ${label}...`);
+        } catch (error) {
+            const feedback = toErrorFeedback(error, `Could not open ${label}`);
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
         }
     }
 
@@ -791,6 +837,7 @@ function App() {
 
     useEffect(() => {
         void loadData();
+        void checkForUpdates();
     }, []);
 
     useEffect(() => {
@@ -887,6 +934,33 @@ function App() {
                     </button>
                 </div>
                 <p className={`status ${diagnosticsStatusClass}`}><span className="status-dot" aria-hidden="true" /> {diagnosticsStatusLabel}</p>
+                {updateInfo?.updateAvailable && !isUpdateDismissed && (
+                    <div className="update-banner" role="status" aria-live="polite">
+                        <div className="update-banner-copy">
+                            <strong>Update available:</strong> {updateInfo.latestVersion}
+                            {appVersion && <span className="update-current">Current: {appVersion}</span>}
+                        </div>
+                        <div className="update-banner-actions">
+                            <button className="switch-btn secondary" onClick={() => setIsUpdateDismissed(true)} disabled={isLoading || isModalOpen}>
+                                Later
+                            </button>
+                            <button
+                                className="switch-btn secondary"
+                                onClick={() => void onOpenUpdateLink(updateInfo.releaseUrl || updateInfo.downloadUrl, 'release page')}
+                                disabled={isLoading || isModalOpen || !(updateInfo.releaseUrl || updateInfo.downloadUrl)}
+                            >
+                                Release notes
+                            </button>
+                            <button
+                                className="action-btn"
+                                onClick={() => void onOpenUpdateLink(updateInfo.downloadUrl || updateInfo.releaseUrl, 'update download')}
+                                disabled={isLoading || isModalOpen || !(updateInfo.downloadUrl || updateInfo.releaseUrl)}
+                            >
+                                Download update
+                            </button>
+                        </div>
+                    </div>
+                )}
             </header>
 
             <main className="dashboard workspace-layout">

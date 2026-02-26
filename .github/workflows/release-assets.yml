@@ -13,6 +13,7 @@ jobs:
     runs-on: windows-2022
     env:
       TAG_NAME: ${{ github.event.release.tag_name }}
+      WINDOWS_CODESIGN_TIMESTAMP_URL: ${{ vars.WINDOWS_CODESIGN_TIMESTAMP_URL || 'http://timestamp.digicert.com' }}
 
     steps:
       - name: Checkout
@@ -39,7 +40,48 @@ jobs:
         working-directory: frontend
 
       - name: Build Windows executable
-        run: wails build -platform windows/amd64 -clean -nopackage -nosyncgomod -m
+        shell: powershell
+        run: |
+          if (-not $env:TAG_NAME) {
+            throw "TAG_NAME is missing"
+          }
+
+          wails build -platform windows/amd64 -clean -nopackage -nosyncgomod -m -ldflags "-X main.appVersion=$env:TAG_NAME"
+
+      - name: Sign executable (Authenticode, optional)
+        if: ${{ secrets.WINDOWS_CODESIGN_CERT_BASE64 != '' && secrets.WINDOWS_CODESIGN_PASSWORD != '' }}
+        env:
+          WINDOWS_CODESIGN_CERT_BASE64: ${{ secrets.WINDOWS_CODESIGN_CERT_BASE64 }}
+          WINDOWS_CODESIGN_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PASSWORD }}
+        shell: powershell
+        run: |
+          $signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
+          if (-not $signtool) {
+            $signtool = Get-ChildItem "C:/Program Files (x86)/Windows Kits/10/bin/*/x64/signtool.exe" |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+
+          if (-not $signtool) {
+            throw "signtool.exe was not found on the runner"
+          }
+
+          $certPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CODESIGN_CERT_BASE64))
+
+          & $signtool sign /fd SHA256 /f "$certPath" /p "$env:WINDOWS_CODESIGN_PASSWORD" /tr "$env:WINDOWS_CODESIGN_TIMESTAMP_URL" /td SHA256 /d "Heat Save Manager" "build/bin/HeatSaveManager.exe"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Code signing failed"
+          }
+
+          & $signtool verify /pa /v "build/bin/HeatSaveManager.exe"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Signed executable verification failed"
+          }
+
+      - name: Skip signing (no certificate configured)
+        if: ${{ secrets.WINDOWS_CODESIGN_CERT_BASE64 == '' || secrets.WINDOWS_CODESIGN_PASSWORD == '' }}
+        run: echo "No code-signing certificate configured; publishing unsigned binary."
 
       - name: Package release archive
         shell: powershell
@@ -48,15 +90,32 @@ jobs:
             throw "TAG_NAME is missing"
           }
 
-          $assetName = "HeatSaveManager-$env:TAG_NAME-windows-x64.zip"
-          $assetPath = "build/bin/$assetName"
+          $zipAssetName = "HeatSaveManager-$env:TAG_NAME-windows-x64.zip"
+          $zipAssetPath = "build/bin/$zipAssetName"
+          $exeAssetName = "HeatSaveManager-$env:TAG_NAME-windows-x64.exe"
+          $exeAssetPath = "build/bin/$exeAssetName"
 
           if (-not (Test-Path "build/bin/HeatSaveManager.exe")) {
             throw "Expected build/bin/HeatSaveManager.exe was not found"
           }
 
-          Compress-Archive -Path "build/bin/HeatSaveManager.exe" -DestinationPath $assetPath -Force
-          "ASSET_NAME=$assetName" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Copy-Item "build/bin/HeatSaveManager.exe" $exeAssetPath -Force
+          Compress-Archive -Path "build/bin/HeatSaveManager.exe" -DestinationPath $zipAssetPath -Force
+
+          $zipChecksumName = "$zipAssetName.sha256"
+          $zipChecksumPath = "build/bin/$zipChecksumName"
+          $zipHash = (Get-FileHash -Algorithm SHA256 $zipAssetPath).Hash.ToLowerInvariant()
+          "$zipHash  $zipAssetName" | Out-File -FilePath $zipChecksumPath -Encoding ascii
+
+          $exeChecksumName = "$exeAssetName.sha256"
+          $exeChecksumPath = "build/bin/$exeChecksumName"
+          $exeHash = (Get-FileHash -Algorithm SHA256 $exeAssetPath).Hash.ToLowerInvariant()
+          "$exeHash  $exeAssetName" | Out-File -FilePath $exeChecksumPath -Encoding ascii
+
+          "ZIP_ASSET_NAME=$zipAssetName" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ZIP_CHECKSUM_NAME=$zipChecksumName" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EXE_ASSET_NAME=$exeAssetName" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EXE_CHECKSUM_NAME=$exeChecksumName" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload asset to GitHub release
         env:
@@ -68,13 +127,41 @@ jobs:
             throw "TAG_NAME is missing"
           }
 
-          if (-not $env:ASSET_NAME) {
-            throw "ASSET_NAME is missing"
+          if (-not $env:ZIP_ASSET_NAME) {
+            throw "ZIP_ASSET_NAME is missing"
           }
 
-          $assetPath = "build/bin/$env:ASSET_NAME"
-          if (-not (Test-Path $assetPath)) {
-            throw "Expected asset not found at $assetPath"
+          if (-not $env:ZIP_CHECKSUM_NAME) {
+            throw "ZIP_CHECKSUM_NAME is missing"
+          }
+
+          if (-not $env:EXE_ASSET_NAME) {
+            throw "EXE_ASSET_NAME is missing"
+          }
+
+          if (-not $env:EXE_CHECKSUM_NAME) {
+            throw "EXE_CHECKSUM_NAME is missing"
+          }
+
+          $zipAssetPath = "build/bin/$env:ZIP_ASSET_NAME"
+          $zipChecksumPath = "build/bin/$env:ZIP_CHECKSUM_NAME"
+          $exeAssetPath = "build/bin/$env:EXE_ASSET_NAME"
+          $exeChecksumPath = "build/bin/$env:EXE_CHECKSUM_NAME"
+
+          if (-not (Test-Path $zipAssetPath)) {
+            throw "Expected zip asset not found at $zipAssetPath"
+          }
+
+          if (-not (Test-Path $zipChecksumPath)) {
+            throw "Expected zip checksum file not found at $zipChecksumPath"
+          }
+
+          if (-not (Test-Path $exeAssetPath)) {
+            throw "Expected exe asset not found at $exeAssetPath"
+          }
+
+          if (-not (Test-Path $exeChecksumPath)) {
+            throw "Expected exe checksum file not found at $exeChecksumPath"
           }
 
           $maxAttempts = 6
@@ -91,4 +178,4 @@ jobs:
             Start-Sleep -Seconds 10
           }
 
-          gh release upload "$env:TAG_NAME" "$assetPath" --clobber --repo "$env:GH_REPO"
+          gh release upload "$env:TAG_NAME" "$zipAssetPath" "$zipChecksumPath" "$exeAssetPath" "$exeChecksumPath" --clobber --repo "$env:GH_REPO"
