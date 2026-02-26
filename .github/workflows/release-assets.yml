@@ -39,7 +39,13 @@ jobs:
         working-directory: frontend
 
       - name: Build Windows executable
-        run: wails build -platform windows/amd64 -clean -nopackage -nosyncgomod -m
+        shell: powershell
+        run: |
+          if (-not $env:TAG_NAME) {
+            throw "TAG_NAME is missing"
+          }
+
+          wails build -platform windows/amd64 -clean -nopackage -nosyncgomod -m -ldflags "-X main.appVersion=$env:TAG_NAME"
 
       - name: Package release archive
         shell: powershell
@@ -61,4 +67,34 @@ jobs:
       - name: Upload asset to GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG_NAME" "build/bin/$ASSET_NAME" --clobber
+          GH_REPO: ${{ github.repository }}
+        shell: powershell
+        run: |
+          if (-not $env:TAG_NAME) {
+            throw "TAG_NAME is missing"
+          }
+
+          if (-not $env:ASSET_NAME) {
+            throw "ASSET_NAME is missing"
+          }
+
+          $assetPath = "build/bin/$env:ASSET_NAME"
+          if (-not (Test-Path $assetPath)) {
+            throw "Expected asset not found at $assetPath"
+          }
+
+          $maxAttempts = 6
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            gh release view "$env:TAG_NAME" --repo "$env:GH_REPO" | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+              break
+            }
+
+            if ($attempt -eq $maxAttempts) {
+              throw "Release $env:TAG_NAME not available after $maxAttempts attempts"
+            }
+
+            Start-Sleep -Seconds 10
+          }
+
+          gh release upload "$env:TAG_NAME" "$assetPath" --clobber --repo "$env:GH_REPO"

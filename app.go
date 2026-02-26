@@ -2,11 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"heat-save-manager/internal/bundle"
@@ -19,6 +25,14 @@ import (
 	"heat-save-manager/internal/profiles"
 	"heat-save-manager/internal/switcher"
 )
+
+const (
+	githubLatestURL    = "https://api.github.com/repos/ElrikCty/heat-save-manager/releases/latest"
+	defaultUserAgent   = "heat-save-manager-update-check"
+	defaultHTTPTimeout = 8 * time.Second
+)
+
+var appVersion = "dev"
 
 // App struct
 type App struct {
@@ -55,6 +69,16 @@ type AppPaths struct {
 	ProfilesPath string `json:"profilesPath"`
 }
 
+type UpdateInfo struct {
+	CurrentVersion  string `json:"currentVersion"`
+	LatestVersion   string `json:"latestVersion"`
+	UpdateAvailable bool   `json:"updateAvailable"`
+	ReleaseURL      string `json:"releaseUrl"`
+	DownloadURL     string `json:"downloadUrl"`
+	PublishedAt     string `json:"publishedAt"`
+	Notes           string `json:"notes"`
+}
+
 func (a *App) initDefaultPaths() {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -88,6 +112,101 @@ func (a *App) SetSaveGamePath(saveGamePath string) error {
 		return fmt.Errorf("save app settings: %w", err)
 	}
 
+	return nil
+}
+
+func (a *App) GetAppVersion() string {
+	return appVersion
+}
+
+func (a *App) CheckForUpdates() (UpdateInfo, error) {
+	info := UpdateInfo{
+		CurrentVersion: appVersion,
+		LatestVersion:  appVersion,
+	}
+
+	client := &http.Client{Timeout: defaultHTTPTimeout}
+	req, err := http.NewRequest(http.MethodGet, githubLatestURL, nil)
+	if err != nil {
+		return info, fmt.Errorf("create update check request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", defaultUserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return info, fmt.Errorf("request latest release: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return info, fmt.Errorf("latest release check failed: %s (%s)", resp.Status, strings.TrimSpace(string(body)))
+	}
+
+	var payload struct {
+		TagName     string `json:"tag_name"`
+		HTMLURL     string `json:"html_url"`
+		PublishedAt string `json:"published_at"`
+		Body        string `json:"body"`
+		Assets      []struct {
+			Name               string `json:"name"`
+			BrowserDownloadURL string `json:"browser_download_url"`
+		} `json:"assets"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return info, fmt.Errorf("decode latest release payload: %w", err)
+	}
+
+	latest := strings.TrimSpace(payload.TagName)
+	if latest == "" {
+		return info, nil
+	}
+
+	info.LatestVersion = latest
+	info.ReleaseURL = strings.TrimSpace(payload.HTMLURL)
+	info.PublishedAt = strings.TrimSpace(payload.PublishedAt)
+	info.Notes = strings.TrimSpace(payload.Body)
+
+	for _, asset := range payload.Assets {
+		name := strings.ToLower(strings.TrimSpace(asset.Name))
+		if strings.HasSuffix(name, "windows-x64.zip") {
+			info.DownloadURL = strings.TrimSpace(asset.BrowserDownloadURL)
+			break
+		}
+	}
+
+	if strings.EqualFold(strings.TrimSpace(info.CurrentVersion), "dev") {
+		info.UpdateAvailable = false
+		return info, nil
+	}
+
+	info.UpdateAvailable = isVersionNewer(info.CurrentVersion, info.LatestVersion)
+	return info, nil
+}
+
+func (a *App) OpenExternalURL(rawURL string) error {
+	if a.ctx == nil {
+		return errors.New("app context is not ready")
+	}
+
+	trimmed := strings.TrimSpace(rawURL)
+	if trimmed == "" {
+		return errors.New("url is required")
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return errors.New("invalid url")
+	}
+
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return errors.New("url must be http or https")
+	}
+
+	runtime.BrowserOpenURL(a.ctx, trimmed)
 	return nil
 }
 
@@ -299,4 +418,75 @@ func (a *App) applySaveGamePath(saveGamePath string) error {
 	a.profilesPath = profilesPath
 
 	return nil
+}
+
+func isVersionNewer(current string, latest string) bool {
+	cMajor, cMinor, cPatch, cOK := parseVersionParts(current)
+	lMajor, lMinor, lPatch, lOK := parseVersionParts(latest)
+
+	if !cOK || !lOK {
+		return strings.TrimSpace(current) != strings.TrimSpace(latest)
+	}
+
+	if lMajor != cMajor {
+		return lMajor > cMajor
+	}
+
+	if lMinor != cMinor {
+		return lMinor > cMinor
+	}
+
+	return lPatch > cPatch
+}
+
+func parseVersionParts(tag string) (int, int, int, bool) {
+	trimmed := strings.TrimSpace(strings.TrimPrefix(tag, "v"))
+	if trimmed == "" {
+		return 0, 0, 0, false
+	}
+
+	pieces := strings.Split(trimmed, ".")
+	if len(pieces) < 3 {
+		return 0, 0, 0, false
+	}
+
+	major, ok := parseVersionNumber(pieces[0])
+	if !ok {
+		return 0, 0, 0, false
+	}
+
+	minor, ok := parseVersionNumber(pieces[1])
+	if !ok {
+		return 0, 0, 0, false
+	}
+
+	patch, ok := parseVersionNumber(pieces[2])
+	if !ok {
+		return 0, 0, 0, false
+	}
+
+	return major, minor, patch, true
+}
+
+func parseVersionNumber(piece string) (int, bool) {
+	trimmed := strings.TrimSpace(piece)
+	if trimmed == "" {
+		return 0, false
+	}
+
+	end := 0
+	for end < len(trimmed) && trimmed[end] >= '0' && trimmed[end] <= '9' {
+		end++
+	}
+
+	if end == 0 {
+		return 0, false
+	}
+
+	value, err := strconv.Atoi(trimmed[:end])
+	if err != nil {
+		return 0, false
+	}
+
+	return value, true
 }
