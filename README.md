@@ -28,6 +28,8 @@ Switch between save profiles safely from a desktop UI, with backup and rollback 
 
 ## Development
 
+- Fast local verification (generate bindings + frontend build + backend tests): `scripts\verify.cmd`
+- PowerShell variant: `./scripts/verify.ps1`
 - Run app in development mode: `wails dev`
 - Build distributable app: `wails build`
 - Validate frontend changes: `npm run build --prefix frontend`
@@ -36,5 +38,7 @@ Switch between save profiles safely from a desktop UI, with backup and rollback 
 ### Repository Hygiene
 
 - Line endings are normalized with `.gitattributes` and `.editorconfig` to reduce CRLF/LF-only diffs.
-- `wails build` may regenerate files under `frontend/wailsjs/`; commit those changes only when the generated API surface actually changed.
+- `frontend/wailsjs/` is generated and ignored by git; regenerate it locally with `scripts\verify.cmd` or `wails dev`.
+- Use `wails build -nosyncgomod -m` for binding refresh to avoid unintended `go.mod` churn.
+- CI validates that `frontend/wailsjs/` stays untracked and that validation steps leave a clean git tree.
 - See `CONTRIBUTING.md` for PR checklist and commit scope guidance.
