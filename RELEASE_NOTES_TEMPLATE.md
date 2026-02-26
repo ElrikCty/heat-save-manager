@@ -7,6 +7,13 @@ Use this when publishing a new GitHub release.
 - <short bullet>
 - <short bullet>
 
+## What's changed
+
+- <PR title> by @<author> in <PR link>
+- <PR title> by @<author> in <PR link>
+
+Full Changelog: https://github.com/ElrikCty/heat-save-manager/compare/<previous_tag>...<new_tag>
+
 ## Verification
 
 - Windows executable: `HeatSaveManager-vX.Y.Z-windows-x64.exe`
