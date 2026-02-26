@@ -247,6 +247,9 @@ function App() {
     const selectedCustomDestination = saveDestinationProfile === NEW_PROFILE_OPTION ? saveDestinationNewName.trim() : saveDestinationProfile.trim();
     const resolvedSaveDestination = saveDestinationMode === 'active' ? activeProfile.trim() : selectedCustomDestination;
     const canSaveCurrent = resolvedSaveDestination !== '';
+    const updateDownloadURL = (updateInfo?.downloadUrl || '').trim();
+    const isInstallerUpdate = updateDownloadURL.toLowerCase().endsWith('-installer.exe');
+    const updatePrimaryLabel = isInstallerUpdate ? 'Install update' : 'Update now';
 
     function showToast(message: string, kind: ToastKind = 'success') {
         setToastKind(kind);
@@ -967,7 +970,7 @@ function App() {
                                 onClick={() => void onOpenUpdateLink(updateInfo.downloadUrl || updateInfo.releaseUrl, 'update download')}
                                 disabled={isLoading || isModalOpen || !(updateInfo.downloadUrl || updateInfo.releaseUrl)}
                             >
-                                Update now
+                                {updatePrimaryLabel}
                             </button>
                         </div>
                     </div>
