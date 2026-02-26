@@ -25,6 +25,7 @@ Use this checklist for every production release.
 ## 4) Publish
 
 - [ ] Draft release notes (highlights, fixes, breaking changes if any)
+  - helper: `scripts\generate-release-notes.cmd -Tag vX.Y.Z`
 - [ ] Publish the GitHub release (workflow auto-builds and uploads Windows asset)
 - [ ] Verify `Release Assets` workflow completed successfully
 - [ ] If no release-triggered run appears, manually dispatch it:
