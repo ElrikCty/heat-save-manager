@@ -490,7 +490,7 @@ function App() {
 
         const target = resolvedSaveDestination;
         const requested = saveDestinationMode === 'active' ? '' : target;
-        const shouldAutoSetActive = !activeProfile.trim() && needsMarkerFileFix && profiles.length === 0 && requested !== '';
+        const shouldAutoSetActive = !activeProfile.trim() && needsMarkerFileFix && requested !== '';
 
         try {
             setIsLoading(true);
@@ -676,7 +676,8 @@ function App() {
             setRecoveryHint('');
             await SaveCurrentProfile(profileName);
 
-            if (!activeProfile.trim() && needsMarkerFileFix && profiles.length === 0) {
+            const shouldAutoSetActive = !activeProfile.trim() && needsMarkerFileFix;
+            if (shouldAutoSetActive) {
                 await CreateMarkerFile(profileName);
                 setActiveProfile(profileName);
             }
@@ -684,7 +685,9 @@ function App() {
             await loadData();
             setDiagnosticsModal(null);
             setFirstSaveProfileName('');
-            setStatus(`Saved current progress to ${profileName} and set it as active.`);
+            setStatus(shouldAutoSetActive
+                ? `Saved current progress to ${profileName} and set it as active.`
+                : `Saved current progress to ${profileName}.`);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Save current failed');
             setStatus(feedback.message);
