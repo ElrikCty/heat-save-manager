@@ -170,13 +170,7 @@ func (a *App) CheckForUpdates() (UpdateInfo, error) {
 	info.PublishedAt = strings.TrimSpace(payload.PublishedAt)
 	info.Notes = strings.TrimSpace(payload.Body)
 
-	for _, asset := range payload.Assets {
-		name := strings.ToLower(strings.TrimSpace(asset.Name))
-		if strings.HasSuffix(name, "windows-x64.zip") {
-			info.DownloadURL = strings.TrimSpace(asset.BrowserDownloadURL)
-			break
-		}
-	}
+	info.DownloadURL = selectPreferredWindowsDownloadURL(payload.Assets)
 
 	if strings.EqualFold(strings.TrimSpace(info.CurrentVersion), "dev") {
 		info.UpdateAvailable = false
@@ -489,4 +483,46 @@ func parseVersionNumber(piece string) (int, bool) {
 	}
 
 	return value, true
+}
+
+func selectPreferredWindowsDownloadURL(assets []struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}) string {
+	if len(assets) == 0 {
+		return ""
+	}
+
+	type candidate struct {
+		suffix string
+		url    string
+	}
+
+	choices := []candidate{}
+	for _, asset := range assets {
+		name := strings.ToLower(strings.TrimSpace(asset.Name))
+		url := strings.TrimSpace(asset.BrowserDownloadURL)
+		if name == "" || url == "" {
+			continue
+		}
+
+		switch {
+		case strings.HasSuffix(name, "windows-x64-installer.exe"):
+			choices = append(choices, candidate{suffix: "installer", url: url})
+		case strings.HasSuffix(name, "windows-x64.exe"):
+			choices = append(choices, candidate{suffix: "exe", url: url})
+		case strings.HasSuffix(name, "windows-x64.zip"):
+			choices = append(choices, candidate{suffix: "zip", url: url})
+		}
+	}
+
+	for _, preferred := range []string{"installer", "exe", "zip"} {
+		for _, c := range choices {
+			if c.suffix == preferred {
+				return c.url
+			}
+		}
+	}
+
+	return ""
 }
