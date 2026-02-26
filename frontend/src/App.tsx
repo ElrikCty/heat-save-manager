@@ -362,11 +362,22 @@ function App() {
     }
 
     async function checkForUpdates() {
+        let resolvedVersion = '';
+
         try {
-            const [version, info] = await Promise.all([GetAppVersion(), CheckForUpdates()]);
-            setAppVersion(version);
+            resolvedVersion = await GetAppVersion();
+            setAppVersion(resolvedVersion);
+        } catch {
+            // Keep fallback version label if lookup fails.
+        }
+
+        try {
+            const info = await CheckForUpdates();
             setUpdateInfo(info);
             setIsUpdateDismissed(false);
+            if (!resolvedVersion && info.currentVersion) {
+                setAppVersion(info.currentVersion);
+            }
             if (info.updateAvailable) {
                 showToast(`Update available: ${info.latestVersion}`, 'info');
             }
@@ -937,8 +948,8 @@ function App() {
                 {updateInfo?.updateAvailable && !isUpdateDismissed && (
                     <div className="update-banner" role="status" aria-live="polite">
                         <div className="update-banner-copy">
-                            <strong>Update available:</strong> {updateInfo.latestVersion}
-                            {appVersion && <span className="update-current">Current: {appVersion}</span>}
+                            <strong>New version {updateInfo.latestVersion} is available.</strong>
+                            <span className="update-current">You&apos;re on {appVersion || updateInfo.currentVersion || 'unknown'}.</span>
                         </div>
                         <div className="update-banner-actions">
                             <button className="switch-btn secondary" onClick={() => setIsUpdateDismissed(true)} disabled={isLoading || isModalOpen}>
@@ -949,14 +960,14 @@ function App() {
                                 onClick={() => void onOpenUpdateLink(updateInfo.releaseUrl || updateInfo.downloadUrl, 'release page')}
                                 disabled={isLoading || isModalOpen || !(updateInfo.releaseUrl || updateInfo.downloadUrl)}
                             >
-                                Release notes
+                                View notes
                             </button>
                             <button
                                 className="action-btn"
                                 onClick={() => void onOpenUpdateLink(updateInfo.downloadUrl || updateInfo.releaseUrl, 'update download')}
                                 disabled={isLoading || isModalOpen || !(updateInfo.downloadUrl || updateInfo.releaseUrl)}
                             >
-                                Download update
+                                Update now
                             </button>
                         </div>
                     </div>
@@ -1525,6 +1536,10 @@ function App() {
                     </div>
                 </div>
             )}
+
+            <div className="app-version-chip" aria-label="Current app version">
+                v{(appVersion || updateInfo?.currentVersion || 'dev').replace(/^v/i, '')}
+            </div>
         </div>
     );
 }
