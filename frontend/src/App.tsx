@@ -12,6 +12,7 @@ import {
     ListProfiles,
     PickImportBundlePath,
     PrepareFreshProfile,
+    PrepareFreshProfileWithoutSave,
     RenameProfile,
     SaveCurrentProfile,
     SetSaveGamePath,
@@ -183,6 +184,8 @@ function App() {
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [firstSaveProfileName, setFirstSaveProfileName] = useState('');
+    const [freshConfirmProfileName, setFreshConfirmProfileName] = useState('');
+    const [isFreshConfirmOpen, setIsFreshConfirmOpen] = useState(false);
     const [isBundleExpanded, setIsBundleExpanded] = useState(false);
     const [selectedProfileName, setSelectedProfileName] = useState('');
     const [toastMessage, setToastMessage] = useState('');
@@ -193,7 +196,7 @@ function App() {
     const lastStatusToastRef = useRef('');
     const lastRecoveryToastRef = useRef('');
 
-    const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen;
+    const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen || isFreshConfirmOpen;
 
     const canApplyPath = saveGamePathInput.trim() !== '';
     const canPrepareFresh = freshProfileName.trim() !== '';
@@ -206,20 +209,24 @@ function App() {
     const hasQuickActions = needsProfilesFolderFix || needsMarkerFileFix;
     const hasDiagnosticErrors = healthReport?.items.some((item) => item.severity === 'error') ?? false;
     const hasDiagnosticWarnings = healthReport?.items.some((item) => item.severity === 'warn') ?? false;
-    const diagnosticsStatusLabel = !healthReport
-        ? 'Not run yet'
-        : hasDiagnosticErrors
-            ? 'Needs attention'
-            : hasDiagnosticWarnings
-                ? 'Ready with warnings'
-                : 'Ready';
-    const diagnosticsStatusClass = !healthReport
+    const diagnosticsStatusLabel = isLoading
+        ? 'Working...'
+        : !healthReport
+            ? 'Not run yet'
+            : hasDiagnosticErrors
+                ? 'Needs attention'
+                : hasDiagnosticWarnings
+                    ? 'Ready with warnings'
+                    : 'Ready';
+    const diagnosticsStatusClass = isLoading
         ? 'diag-pending'
-        : hasDiagnosticErrors
-            ? 'diag-attention'
-            : hasDiagnosticWarnings
-                ? 'diag-warning'
-                : 'diag-ready';
+        : !healthReport
+            ? 'diag-pending'
+            : hasDiagnosticErrors
+                ? 'diag-attention'
+                : hasDiagnosticWarnings
+                    ? 'diag-warning'
+                    : 'diag-ready';
     const hasActiveDestination = activeProfile.trim() !== '' && !needsMarkerFileFix;
     const selectedCustomDestination = saveDestinationProfile === NEW_PROFILE_OPTION ? saveDestinationNewName.trim() : saveDestinationProfile.trim();
     const resolvedSaveDestination = saveDestinationMode === 'active' ? activeProfile.trim() : selectedCustomDestination;
@@ -246,6 +253,7 @@ function App() {
     async function loadData(withRefreshToast = false) {
         try {
             setIsLoading(true);
+            const hadActiveBeforeLoad = activeProfile.trim() !== '';
             if (withRefreshToast) {
                 showToast('Refreshing data...', 'info');
             }
@@ -294,6 +302,10 @@ function App() {
             setSaveDestinationMode((current) => {
                 if (current === 'active' && !resolvedActive) {
                     return 'custom';
+                }
+
+                if (current === 'custom' && resolvedActive && !hadActiveBeforeLoad) {
+                    return 'active';
                 }
 
                 return current;
@@ -460,15 +472,42 @@ function App() {
             return;
         }
 
+        setFreshConfirmProfileName(name);
+        setIsFreshConfirmOpen(true);
+    }
+
+    function closeFreshConfirmModal() {
+        setIsFreshConfirmOpen(false);
+        setFreshConfirmProfileName('');
+    }
+
+    async function onConfirmPrepareFresh(preserveCurrent: boolean) {
+        const name = freshConfirmProfileName.trim();
+        if (!name) {
+            setStatus('Choose a profile name before preparing a fresh save.');
+            closeFreshConfirmModal();
+            return;
+        }
+
         try {
             setIsLoading(true);
-            setStatus(`Creating profile ${name}...`);
+            setStatus(preserveCurrent
+                ? `Saving current progress and starting new save ${name}...`
+                : `Starting new save ${name} without saving current progress...`);
             setRecoveryHint('');
-            await PrepareFreshProfile(name);
+            if (preserveCurrent) {
+                await PrepareFreshProfile(name);
+            } else {
+                await PrepareFreshProfileWithoutSave(name);
+            }
             setFreshProfileName('');
+            setFreshConfirmProfileName('');
+            setIsFreshConfirmOpen(false);
             setActiveProfile(name);
             await loadData();
-            setStatus(`Profile created from current root save: ${name}. Active profile updated.`);
+            setStatus(preserveCurrent
+                ? `Current progress saved into ${name}. New save started and set active.`
+                : `Started new save ${name} without saving current root progress. Active profile updated.`);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Create profile failed');
             setStatus(feedback.message);
@@ -720,6 +759,11 @@ function App() {
 
         if (isImportModalOpen) {
             closeImportModal();
+            return;
+        }
+
+        if (isFreshConfirmOpen) {
+            closeFreshConfirmModal();
         }
     }
 
@@ -763,7 +807,7 @@ function App() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isModalOpen, isLoading, renameTarget, deleteTarget, diagnosticsModal, isExportModalOpen, isImportModalOpen]);
+    }, [isModalOpen, isLoading, renameTarget, deleteTarget, diagnosticsModal, isExportModalOpen, isImportModalOpen, isFreshConfirmOpen]);
 
     useEffect(() => {
         if (importTargetProfile === NEW_PROFILE_OPTION) {
@@ -798,6 +842,16 @@ function App() {
         lastRecoveryToastRef.current = hint;
         showToast(`Tip: ${hint}`, 'info');
     }, [recoveryHint]);
+
+    useEffect(() => {
+        if (status.trim().toLowerCase() !== 'ready') {
+            return;
+        }
+
+        if (toastMessage.toLowerCase().includes('loading profiles')) {
+            setToastMessage('');
+        }
+    }, [status, toastMessage]);
 
     useEffect(() => {
         if (!toastMessage) {
@@ -1124,6 +1178,31 @@ function App() {
                 </div>
             )}
 
+            {isFreshConfirmOpen && (
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="fresh-confirm-modal-title" aria-describedby="fresh-confirm-modal-description">
+                    <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+                        <h3 id="fresh-confirm-modal-title">Start New Save</h3>
+                        <p id="fresh-confirm-modal-description">
+                            Do you want to save your current progress into <strong>{freshConfirmProfileName}</strong> before starting fresh?
+                        </p>
+                        <p className="modal-note">
+                            Saving first backs up current <span className="path-token">savegame</span> and <span className="path-token">wraps</span> into that profile. Skipping starts fresh and discards the current root progress.
+                        </p>
+                        <div className="modal-actions">
+                            <button className="switch-btn secondary" onClick={closeFreshConfirmModal} disabled={isLoading}>
+                                Cancel
+                            </button>
+                            <button className="switch-btn secondary" onClick={() => void onConfirmPrepareFresh(false)} disabled={isLoading}>
+                                Skip save
+                            </button>
+                            <button className="action-btn" onClick={() => void onConfirmPrepareFresh(true)} disabled={isLoading}>
+                                Save first
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {diagnosticsModal && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="diag-modal-title" aria-describedby="diag-modal-description">
                     <div className="modal-card" onClick={(event) => event.stopPropagation()}>
@@ -1187,11 +1266,11 @@ function App() {
                                     <>
                                         <p className="modal-note">No active profile marker detected. Save current progress first to preserve the current root data and set an active profile.</p>
                                         <div className="modal-actions">
-                                            <button className="action-btn" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
-                                                Save Current Progress first
-                                            </button>
                                             <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
                                                 Close
+                                            </button>
+                                            <button className="action-btn" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
+                                                Save Current Progress first
                                             </button>
                                         </div>
                                     </>
@@ -1199,11 +1278,11 @@ function App() {
                                     <>
                                         <p className="modal-note">No profiles exist yet. Create one using Start New Save or Save Current Progress first.</p>
                                         <div className="modal-actions">
-                                            <button className="action-btn" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
-                                                Save Current Progress first
-                                            </button>
                                             <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
                                                 Close
+                                            </button>
+                                            <button className="action-btn" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
+                                                Save Current Progress first
                                             </button>
                                         </div>
                                     </>
@@ -1319,7 +1398,7 @@ function App() {
                             <button className="switch-btn secondary" onClick={closeImportModal} disabled={isLoading}>
                                 Cancel
                             </button>
-                            <button className="action-btn secondary import-action" onClick={() => void onImportBundle()} disabled={isLoading || !canImportBundle}>
+                            <button className="action-btn import-action" onClick={() => void onImportBundle()} disabled={isLoading || !canImportBundle}>
                                 <Upload size={14} strokeWidth={2.1} /> Import Bundle
                             </button>
                         </div>

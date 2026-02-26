@@ -1158,13 +1158,10 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    background: #1c1c33;
-    color: #8f76de;
-    border-color: rgba(143, 118, 222, 0.38);
 }
 
 .import-modal-card .modal-actions .import-action svg {
-    color: #8f76de;
+    color: currentColor;
 }
 
 .toast {

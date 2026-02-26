@@ -228,6 +228,38 @@ func TestPrepareFreshProfileRejectsInvalidName(t *testing.T) {
 	}
 }
 
+func TestPrepareFreshProfileWithoutPreserveClearsRootAndCreatesEmptyProfile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+
+	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "old-save")
+	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "old-wrap")
+
+	store := marker.NewStore(saveGamePath)
+	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
+
+	if err := svc.PrepareFreshProfileWithoutSave("fresh-empty"); err != nil {
+		t.Fatalf("prepare fresh profile without preserve: %v", err)
+	}
+
+	assertDirEmpty(t, filepath.Join(saveGamePath, "savegame"))
+	assertDirEmpty(t, filepath.Join(saveGamePath, "wraps"))
+	assertDirEmpty(t, filepath.Join(profilesPath, "fresh-empty", "savegame"))
+	assertDirEmpty(t, filepath.Join(profilesPath, "fresh-empty", "wraps"))
+
+	active, err := store.ReadActiveProfile()
+	if err != nil {
+		t.Fatalf("read marker: %v", err)
+	}
+
+	if active != "fresh-empty" {
+		t.Fatalf("expected active profile fresh-empty, got %q", active)
+	}
+}
+
 func createDirWithFile(t *testing.T, dir string, fileName string, content string) {
 	t.Helper()
 

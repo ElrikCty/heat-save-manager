@@ -127,6 +127,10 @@ func (a *App) PrepareFreshProfile(profileName string) error {
 	return a.newLifecycleService().PrepareFreshProfile(profileName)
 }
 
+func (a *App) PrepareFreshProfileWithoutSave(profileName string) error {
+	return a.newLifecycleService().PrepareFreshProfileWithoutSave(profileName)
+}
+
 func (a *App) SaveCurrentProfile(profileName string) error {
 	return a.newLifecycleService().SaveCurrentProfile(profileName)
 }
