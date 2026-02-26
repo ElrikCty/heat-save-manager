@@ -27,6 +27,8 @@ Use this checklist for every production release.
 - [ ] Draft release notes (highlights, fixes, breaking changes if any)
 - [ ] Publish the GitHub release (workflow auto-builds and uploads Windows asset)
 - [ ] Verify `Release Assets` workflow completed successfully
+- [ ] If no release-triggered run appears, manually dispatch it:
+  - `gh workflow run .github/workflows/release-assets.yml -f tag=vX.Y.Z`
 - [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.exe`
 - [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.zip`
 - [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.exe.sha256`

@@ -3,16 +3,22 @@ name: Release Assets
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to package/upload (example: v1.0.3)"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   build-windows-asset:
-    if: startsWith(github.event.release.tag_name, 'v')
+    if: startsWith(github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name, 'v')
     runs-on: windows-2022
     env:
-      TAG_NAME: ${{ github.event.release.tag_name }}
+      TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
       WINDOWS_CODESIGN_TIMESTAMP_URL: ${{ vars.WINDOWS_CODESIGN_TIMESTAMP_URL || 'http://timestamp.digicert.com' }}
 
     steps:

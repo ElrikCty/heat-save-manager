@@ -34,6 +34,7 @@ Equivalent manual commands:
 - PRs use `.github/pull_request_template.md` to enforce local validation and hygiene checks.
 - Releases should follow `RELEASE_CHECKLIST.md`.
 - GitHub release publishing runs `.github/workflows/release-assets.yml` to build and upload Windows release assets automatically.
+- The release-assets workflow also supports manual reruns with `gh workflow run .github/workflows/release-assets.yml -f tag=vX.Y.Z`.
 - If code-signing secrets are configured (`WINDOWS_CODESIGN_CERT_BASE64`, `WINDOWS_CODESIGN_PASSWORD`), release binaries are Authenticode-signed automatically.
 - Release publishing uploads `.exe` and `.zip` assets, each with a `.sha256` checksum file for verification.
 - For Defender false positives, follow `DEFENDER_SUBMISSION.md`.
