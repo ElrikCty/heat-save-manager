@@ -7,11 +7,15 @@ dist/
 
 # Wails build artifacts
 build/bin/
+.wails/
 
 # Frontend dependencies and build output
 node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/wailsjs/
+frontend/.vite/
+frontend/vite.config.ts.timestamp-*.mjs
 frontend/package.json.md5
 
 # IDE / OS
@@ -19,3 +23,8 @@ frontend/package.json.md5
 .idea/
 Thumbs.db
 .DS_Store
+
+# Logs and local scratch
+*.log
+*.tmp
+tmp/

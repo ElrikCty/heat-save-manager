@@ -5,6 +5,10 @@
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
 
+# Keep Go module files LF-only
+go.mod text eol=lf
+go.sum text eol=lf
+
 # Common binary assets
 *.png binary
 *.jpg binary

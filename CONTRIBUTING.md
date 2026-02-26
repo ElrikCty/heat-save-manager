@@ -4,19 +4,25 @@ Thanks for contributing to Heat Save Manager.
 
 ## Local Validation
 
-Run these checks before opening a PR:
+Run this shortcut before opening a PR:
 
+- `scripts\verify.cmd` (Windows)
+- `./scripts/verify.ps1` (PowerShell)
+
+Equivalent manual commands:
+
+- `wails build -s -nopackage -nosyncgomod -m`
 - `go test ./...`
 - `npm run build --prefix frontend`
 
 ## Generated Files Guidance
 
-- `wails build` can regenerate files under `frontend/wailsjs/`.
-- Commit regenerated files only when there is a real API surface change between Go bindings and frontend usage.
-- If generated files changed only by ordering/format churn, discard them before committing.
+- `frontend/wailsjs/` is intentionally ignored and should not be committed.
+- If bindings are missing locally, regenerate them with `scripts\verify.cmd`.
+- Prefer `-nosyncgomod -m` on Wails build commands to avoid unnecessary `go.mod` churn.
 
 ## Commit Scope
 
-- Keep commits focused (feature changes vs generated output vs docs).
+- Keep commits focused (feature changes vs tooling/docs updates).
 - Prefer separate commits when changing UI behavior and repository/tooling configuration.
 - Do not include unrelated local environment changes in PRs.
