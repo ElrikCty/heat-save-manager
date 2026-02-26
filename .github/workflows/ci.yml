@@ -20,6 +20,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install Wails CLI
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -42,6 +47,9 @@ jobs:
             echo "::error::frontend/wailsjs is expected to be ignored by .gitignore."
             exit 1
           fi
+
+      - name: Generate frontend bindings
+        run: wails build -s -nopackage -nosyncgomod -m
 
       - name: Build frontend
         run: npm run build --prefix frontend
