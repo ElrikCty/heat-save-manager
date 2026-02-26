@@ -21,8 +21,10 @@ Use this checklist for every production release.
 ## 4) Publish
 
 - [ ] Draft release notes (highlights, fixes, breaking changes if any)
-- [ ] Attach binaries/artifacts if required
-- [ ] Verify release page and download links
+- [ ] Publish the GitHub release (workflow auto-builds and uploads Windows asset)
+- [ ] Verify `Release Assets` workflow completed successfully
+- [ ] Verify release page includes `HeatSaveManager-vX.Y.Z-windows-x64.zip`
+- [ ] Verify download link works
 
 ## 5) Post-release
 

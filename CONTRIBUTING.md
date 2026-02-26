@@ -33,3 +33,4 @@ Equivalent manual commands:
 - Dependabot is enabled for Go modules, frontend npm deps, and GitHub Actions.
 - PRs use `.github/pull_request_template.md` to enforce local validation and hygiene checks.
 - Releases should follow `RELEASE_CHECKLIST.md`.
+- GitHub release publishing runs `.github/workflows/release-assets.yml` to build and upload the Windows zip automatically.
