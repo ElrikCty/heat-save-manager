@@ -61,7 +61,11 @@ func TestImportProfileBlocksZipSlipPaths(t *testing.T) {
 
 	root := t.TempDir()
 	profilesPath := filepath.Join(root, "Profiles")
+	profileRoot := filepath.Join(profilesPath, "ProfileUnsafe")
 	bundlePath := filepath.Join(root, "unsafe.zip")
+
+	writeFile(t, filepath.Join(profileRoot, "savegame", "slot.sav"), "original-save")
+	writeFile(t, filepath.Join(profileRoot, "wraps", "wrap.txt"), "original-wrap")
 
 	createZipWithEntry(t, bundlePath, "../escape.txt", "bad")
 
@@ -70,9 +74,68 @@ func TestImportProfileBlocksZipSlipPaths(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected zip slip validation error")
 	}
+
+	assertFileContent(t, filepath.Join(profileRoot, "savegame", "slot.sav"), "original-save")
+	assertFileContent(t, filepath.Join(profileRoot, "wraps", "wrap.txt"), "original-wrap")
+}
+
+func TestImportProfileKeepsExistingDataWhenBundleLayoutIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	profilesPath := filepath.Join(root, "Profiles")
+	profileRoot := filepath.Join(profilesPath, "ProfileBroken")
+	bundlePath := filepath.Join(root, "broken-layout.zip")
+
+	writeFile(t, filepath.Join(profileRoot, "savegame", "slot.sav"), "original-save")
+	writeFile(t, filepath.Join(profileRoot, "wraps", "wrap.txt"), "original-wrap")
+
+	createZipWithEntry(t, bundlePath, "savegame/slot.sav", "new-save-only")
+
+	svc := NewService(profilesPath)
+	err := svc.ImportProfile("ProfileBroken", bundlePath)
+	if !errors.Is(err, profiles.ErrInvalidProfileLayout) {
+		t.Fatalf("expected ErrInvalidProfileLayout, got %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(profileRoot, "savegame", "slot.sav"), "original-save")
+	assertFileContent(t, filepath.Join(profileRoot, "wraps", "wrap.txt"), "original-wrap")
+}
+
+func TestImportProfileRejectsOversizedEntryCountAndKeepsExistingData(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	profilesPath := filepath.Join(root, "Profiles")
+	profileRoot := filepath.Join(profilesPath, "ProfileBomb")
+	bundlePath := filepath.Join(root, "too-many-entries.zip")
+
+	writeFile(t, filepath.Join(profileRoot, "savegame", "slot.sav"), "original-save")
+	writeFile(t, filepath.Join(profileRoot, "wraps", "wrap.txt"), "original-wrap")
+
+	createZipWithEntries(t, bundlePath, map[string]string{
+		"savegame/slot.sav": "save-data",
+		"wraps/wrap.txt":    "wrap-data",
+	})
+
+	svc := NewService(profilesPath)
+	svc.maxBundleEntries = 1
+	err := svc.ImportProfile("ProfileBomb", bundlePath)
+	if !errors.Is(err, ErrBundleTooLarge) {
+		t.Fatalf("expected ErrBundleTooLarge, got %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(profileRoot, "savegame", "slot.sav"), "original-save")
+	assertFileContent(t, filepath.Join(profileRoot, "wraps", "wrap.txt"), "original-wrap")
 }
 
 func createZipWithEntry(t *testing.T, zipPath string, entryName string, content string) {
+	t.Helper()
+
+	createZipWithEntries(t, zipPath, map[string]string{entryName: content})
+}
+
+func createZipWithEntries(t *testing.T, zipPath string, entries map[string]string) {
 	t.Helper()
 
 	if err := os.MkdirAll(filepath.Dir(zipPath), 0o755); err != nil {
@@ -85,13 +148,15 @@ func createZipWithEntry(t *testing.T, zipPath string, entryName string, content 
 	}
 
 	archive := zip.NewWriter(zf)
-	w, err := archive.Create(entryName)
-	if err != nil {
-		t.Fatalf("create zip entry: %v", err)
-	}
+	for entryName, content := range entries {
+		w, err := archive.Create(entryName)
+		if err != nil {
+			t.Fatalf("create zip entry: %v", err)
+		}
 
-	if _, err := w.Write([]byte(content)); err != nil {
-		t.Fatalf("write zip entry: %v", err)
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Fatalf("write zip entry: %v", err)
+		}
 	}
 
 	if err := archive.Close(); err != nil {

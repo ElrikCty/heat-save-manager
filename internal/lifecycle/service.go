@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"heat-save-manager/internal/fsops"
 )
@@ -13,6 +14,8 @@ import (
 var (
 	ErrProfileNameRequired       = errors.New("profile name is required")
 	ErrProfileNameInvalid        = errors.New("profile name contains invalid characters")
+	ErrActiveProfileRequired     = errors.New("active profile marker is required to preserve current progress")
+	ErrFreshProfileNameConflict  = errors.New("new profile name must differ from active profile when preserving current progress")
 	ErrSaveGamePathRequired      = errors.New("savegame path is required")
 	ErrProfilesPathRequired      = errors.New("profiles path is required")
 	ErrMarkerStoreRequired       = errors.New("marker store is required")
@@ -69,7 +72,25 @@ func (s *Service) prepareFreshProfile(profileName string, preserveCurrent bool) 
 	}
 
 	if preserveCurrent {
-		if err := s.SaveCurrentProfile(name); err != nil {
+		activeProfile, err := s.marker.ReadActiveProfile()
+		if err != nil {
+			if os.IsNotExist(err) {
+				return ErrActiveProfileRequired
+			}
+
+			return err
+		}
+
+		activeName, err := validateProfileName(activeProfile)
+		if err != nil {
+			return ErrActiveProfileRequired
+		}
+
+		if strings.EqualFold(activeName, name) {
+			return ErrFreshProfileNameConflict
+		}
+
+		if err := s.SaveCurrentProfile(activeName); err != nil {
 			return err
 		}
 	}
@@ -82,10 +103,8 @@ func (s *Service) prepareFreshProfile(profileName string, preserveCurrent bool) 
 		return err
 	}
 
-	if !preserveCurrent {
-		if err := s.SaveCurrentProfile(name); err != nil {
-			return err
-		}
+	if err := s.SaveCurrentProfile(name); err != nil {
+		return err
 	}
 
 	return s.marker.WriteActiveProfile(name)
@@ -119,12 +138,21 @@ func (s *Service) SaveCurrentProfile(profileName string) error {
 		return err
 	}
 
-	targetRoot := filepath.Join(s.profilesPath, name)
-	if err := s.ops.ReplaceDir(filepath.Join(s.saveGamePath, savegameDirName), filepath.Join(targetRoot, savegameDirName)); err != nil {
+	stagingRoot, err := os.MkdirTemp(s.profilesPath, name+".save-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stagingRoot)
+
+	if err := s.ops.ReplaceDir(filepath.Join(s.saveGamePath, savegameDirName), filepath.Join(stagingRoot, savegameDirName)); err != nil {
 		return err
 	}
 
-	if err := s.ops.ReplaceDir(filepath.Join(s.saveGamePath, wrapsDirName), filepath.Join(targetRoot, wrapsDirName)); err != nil {
+	if err := s.ops.ReplaceDir(filepath.Join(s.saveGamePath, wrapsDirName), filepath.Join(stagingRoot, wrapsDirName)); err != nil {
+		return err
+	}
+
+	if err := replaceProfileRootAtomic(filepath.Join(s.profilesPath, name), stagingRoot); err != nil {
 		return err
 	}
 
@@ -174,7 +202,7 @@ func (s *Service) RenameProfile(oldName string, newName string) error {
 		return err
 	}
 
-	if strings.TrimSpace(active) == oldTrimmed {
+	if strings.EqualFold(strings.TrimSpace(active), oldTrimmed) {
 		if err := s.marker.WriteActiveProfile(newTrimmed); err != nil {
 			_ = os.Rename(newPath, oldPath)
 			return err
@@ -195,7 +223,7 @@ func (s *Service) DeleteProfile(profileName string) error {
 	}
 
 	active, err := s.marker.ReadActiveProfile()
-	if err == nil && strings.TrimSpace(active) == name {
+	if err == nil && strings.EqualFold(strings.TrimSpace(active), name) {
 		return ErrCannotDeleteActiveProfile
 	}
 
@@ -291,6 +319,44 @@ func clearDirContents(path string) error {
 	for _, entry := range entries {
 		entryPath := filepath.Join(path, entry.Name())
 		if err := os.RemoveAll(entryPath); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func replaceProfileRootAtomic(targetRoot string, stagingRoot string) error {
+	backupRoot := targetRoot + ".backup-" + time.Now().UTC().Format("20060102-150405.000000000")
+	hadExisting := false
+
+	if info, err := os.Stat(targetRoot); err == nil {
+		if !info.IsDir() {
+			return fmt.Errorf("profile path exists but is not a directory: %s", targetRoot)
+		}
+		hadExisting = true
+		if err := os.RemoveAll(backupRoot); err != nil {
+			return err
+		}
+		if err := os.Rename(targetRoot, backupRoot); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.Rename(stagingRoot, targetRoot); err != nil {
+		if hadExisting {
+			if rollbackErr := os.Rename(backupRoot, targetRoot); rollbackErr != nil {
+				return fmt.Errorf("replace profile failed: %w; rollback failed: %v", err, rollbackErr)
+			}
+		}
+
+		return err
+	}
+
+	if hadExisting {
+		if err := os.RemoveAll(backupRoot); err != nil {
 			return err
 		}
 	}

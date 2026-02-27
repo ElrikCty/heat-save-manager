@@ -274,8 +274,8 @@ func validateInstallerURL(rawURL string) (string, error) {
 		return "", errors.New("invalid update download url")
 	}
 
-	if parsed.Scheme != "https" && parsed.Scheme != "http" {
-		return "", errors.New("update download url must be http or https")
+	if parsed.Scheme != "https" {
+		return "", errors.New("update download url must use https")
 	}
 
 	name := strings.ToLower(filepath.Base(parsed.Path))

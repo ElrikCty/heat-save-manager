@@ -3,10 +3,12 @@ package bundle
 import (
 	"archive/zip"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"heat-save-manager/internal/profiles"
 )
@@ -16,14 +18,29 @@ var (
 	ErrProfileNameRequired  = errors.New("profile name is required")
 	ErrBundlePathRequired   = errors.New("bundle path is required")
 	ErrInvalidProfileName   = errors.New("profile name contains invalid characters")
+	ErrBundleTooLarge       = errors.New("bundle exceeds import safety limits")
+)
+
+const (
+	defaultMaxBundleEntries          = 10_000
+	defaultMaxBundleFileBytes  int64 = 256 << 20
+	defaultMaxBundleTotalBytes int64 = 2 << 30
 )
 
 type Service struct {
-	profilesPath string
+	profilesPath        string
+	maxBundleEntries    int
+	maxBundleFileBytes  int64
+	maxBundleTotalBytes int64
 }
 
 func NewService(profilesPath string) *Service {
-	return &Service{profilesPath: profilesPath}
+	return &Service{
+		profilesPath:        profilesPath,
+		maxBundleEntries:    defaultMaxBundleEntries,
+		maxBundleFileBytes:  defaultMaxBundleFileBytes,
+		maxBundleTotalBytes: defaultMaxBundleTotalBytes,
+	}
 }
 
 func (s *Service) ExportProfile(profileName string, bundlePath string) error {
@@ -94,10 +111,14 @@ func (s *Service) ExportProfile(profileName string, bundlePath string) error {
 		if err != nil {
 			return err
 		}
-		defer in.Close()
 
-		_, err = io.Copy(writer, in)
-		return err
+		_, copyErr := io.Copy(writer, in)
+		closeErr := in.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+
+		return closeErr
 	})
 }
 
@@ -121,29 +142,52 @@ func (s *Service) ImportProfile(profileName string, bundlePath string) error {
 	}
 	defer reader.Close()
 
+	if err := os.MkdirAll(s.profilesPath, 0o755); err != nil {
+		return err
+	}
+
 	profileRoot := filepath.Join(s.profilesPath, name)
-	if err := os.RemoveAll(profileRoot); err != nil {
+	stagingRoot, err := os.MkdirTemp(s.profilesPath, name+".import-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stagingRoot)
+
+	if err := s.extractBundleToProfileRoot(reader.File, stagingRoot); err != nil {
 		return err
 	}
 
-	if err := os.MkdirAll(profileRoot, 0o755); err != nil {
+	if err := profiles.ValidateLayout(stagingRoot); err != nil {
 		return err
 	}
 
-	for _, f := range reader.File {
+	return replaceProfileRootAtomic(profileRoot, stagingRoot)
+}
+
+func (s *Service) extractBundleToProfileRoot(files []*zip.File, profileRoot string) error {
+	if len(files) > s.maxBundleEntries {
+		return ErrBundleTooLarge
+	}
+
+	root := filepath.Clean(profileRoot)
+	rootPrefix := root + string(os.PathSeparator)
+	var totalUncompressedBytes int64
+
+	for _, f := range files {
 		targetPath := filepath.Join(profileRoot, filepath.FromSlash(f.Name))
-		if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(profileRoot)+string(os.PathSeparator)) {
+		cleanTargetPath := filepath.Clean(targetPath)
+		if cleanTargetPath != root && !strings.HasPrefix(cleanTargetPath, rootPrefix) {
 			return errors.New("bundle contains invalid file path")
 		}
 
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(targetPath, 0o755); err != nil {
+			if err := os.MkdirAll(cleanTargetPath, 0o755); err != nil {
 				return err
 			}
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(cleanTargetPath), 0o755); err != nil {
 			return err
 		}
 
@@ -152,16 +196,31 @@ func (s *Service) ImportProfile(profileName string, bundlePath string) error {
 			return err
 		}
 
-		out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, f.Mode())
+		out, err := os.OpenFile(cleanTargetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, f.Mode())
 		if err != nil {
 			in.Close()
 			return err
 		}
 
-		if _, err := io.Copy(out, in); err != nil {
+		limited := &io.LimitedReader{R: in, N: s.maxBundleFileBytes + 1}
+		written, copyErr := io.Copy(out, limited)
+		if copyErr != nil {
 			in.Close()
 			out.Close()
-			return err
+			return copyErr
+		}
+
+		if written > s.maxBundleFileBytes {
+			in.Close()
+			out.Close()
+			return ErrBundleTooLarge
+		}
+
+		totalUncompressedBytes += written
+		if totalUncompressedBytes > s.maxBundleTotalBytes {
+			in.Close()
+			out.Close()
+			return ErrBundleTooLarge
 		}
 
 		if err := in.Close(); err != nil {
@@ -174,7 +233,45 @@ func (s *Service) ImportProfile(profileName string, bundlePath string) error {
 		}
 	}
 
-	return profiles.ValidateLayout(profileRoot)
+	return nil
+}
+
+func replaceProfileRootAtomic(profileRoot string, stagingRoot string) error {
+	backupRoot := profileRoot + ".backup-" + time.Now().UTC().Format("20060102-150405.000000000")
+	hadExisting := false
+
+	if info, err := os.Stat(profileRoot); err == nil {
+		if !info.IsDir() {
+			return fmt.Errorf("profile path exists but is not a directory: %s", profileRoot)
+		}
+		hadExisting = true
+		if err := os.RemoveAll(backupRoot); err != nil {
+			return err
+		}
+		if err := os.Rename(profileRoot, backupRoot); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.Rename(stagingRoot, profileRoot); err != nil {
+		if hadExisting {
+			if rollbackErr := os.Rename(backupRoot, profileRoot); rollbackErr != nil {
+				return fmt.Errorf("replace profile failed: %w; rollback failed: %v", err, rollbackErr)
+			}
+		}
+
+		return err
+	}
+
+	if hadExisting {
+		if err := os.RemoveAll(backupRoot); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func validateProfileName(profileName string) (string, error) {

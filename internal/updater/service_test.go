@@ -22,7 +22,7 @@ func (l *launcherStub) Start(path string) error {
 }
 
 func TestStartDownloadsAndLaunchesInstaller(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("installer-bytes"))
 	}))
@@ -32,6 +32,7 @@ func TestStartDownloadsAndLaunchesInstaller(t *testing.T) {
 	tempRoot := t.TempDir()
 
 	svc := NewService(tempRoot, launcher)
+	svc.client = server.Client()
 	svc.now = func() time.Time { return time.Unix(1700000000, 0) }
 
 	var stages []string
@@ -95,7 +96,7 @@ func TestStartRejectsNonInstallerAsset(t *testing.T) {
 }
 
 func TestStartFailsWhenLauncherFails(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("installer-bytes"))
 	}))
@@ -103,6 +104,7 @@ func TestStartFailsWhenLauncherFails(t *testing.T) {
 
 	launcher := &launcherStub{err: errors.New("launch blocked")}
 	svc := NewService(t.TempDir(), launcher)
+	svc.client = server.Client()
 
 	var stages []string
 	svc.SetProgressCallback(func(progress Progress) {
@@ -124,13 +126,14 @@ func TestStartFailsWhenLauncherFails(t *testing.T) {
 }
 
 func TestStartFailsWhenDownloadExceedsLimit(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("this-is-bigger-than-limit"))
 	}))
 	defer server.Close()
 
 	svc := NewService(t.TempDir(), &launcherStub{})
+	svc.client = server.Client()
 	svc.maxDownloadBytes = 4
 
 	_, err := svc.Start(context.Background(), server.URL+"/HeatSaveManager-v1.0.5-windows-x64-installer.exe", "")

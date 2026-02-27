@@ -95,6 +95,24 @@ func TestReplaceDirCreatesDestinationPathWhenMissing(t *testing.T) {
 	assertFileContent(t, filepath.Join(destination, "savegame", "new.sav"), "new")
 }
 
+func TestReplaceDirKeepsDestinationWhenSourceIsMissing(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	source := filepath.Join(root, "missing-source")
+	destination := filepath.Join(root, "destination")
+
+	createFile(t, filepath.Join(destination, "savegame", "old.sav"), "old")
+
+	ops := NewLocal()
+	err := ops.ReplaceDir(source, destination)
+	if !os.IsNotExist(err) {
+		t.Fatalf("expected not-exist error, got %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(destination, "savegame", "old.sav"), "old")
+}
+
 func TestRemoveDirRemovesDirectoryTree(t *testing.T) {
 	t.Parallel()
 

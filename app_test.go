@@ -52,3 +52,39 @@ func TestApplySaveGamePathAcceptsNeedForSpeedHeatParent(t *testing.T) {
 		t.Fatalf("profiles path was not created correctly: %v", err)
 	}
 }
+
+func TestCreateMarkerFileRejectsInvalidProfileName(t *testing.T) {
+	app := &App{}
+	root := t.TempDir()
+	app.saveGamePath = filepath.Join(root, "SaveGame")
+	app.profilesPath = filepath.Join(app.saveGamePath, "Profiles")
+
+	if err := os.MkdirAll(app.profilesPath, 0o755); err != nil {
+		t.Fatalf("create profiles path: %v", err)
+	}
+
+	err := app.CreateMarkerFile("..")
+	if err == nil {
+		t.Fatalf("expected invalid profile name error")
+	}
+
+	if !strings.Contains(strings.ToLower(err.Error()), "invalid") {
+		t.Fatalf("unexpected error for invalid profile name: %v", err)
+	}
+}
+
+func TestCreateMarkerFileAcceptsValidExistingProfile(t *testing.T) {
+	app := &App{}
+	root := t.TempDir()
+	app.saveGamePath = filepath.Join(root, "SaveGame")
+	app.profilesPath = filepath.Join(app.saveGamePath, "Profiles")
+	profileName := "ProfileAlpha"
+
+	if err := os.MkdirAll(filepath.Join(app.profilesPath, profileName), 0o755); err != nil {
+		t.Fatalf("create profile directory: %v", err)
+	}
+
+	if err := app.CreateMarkerFile(profileName); err != nil {
+		t.Fatalf("expected marker creation to succeed: %v", err)
+	}
+}

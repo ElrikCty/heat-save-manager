@@ -130,6 +130,20 @@ function toErrorFeedback(error: unknown, fallback: string): ErrorFeedback {
         };
     }
 
+    if (lowered.includes('active profile marker is required to preserve current progress')) {
+        return {
+            message: 'Save-first needs an active profile first.',
+            hint: 'Set an active profile from Diagnostics, then retry Start New Save.',
+        };
+    }
+
+    if (lowered.includes('new profile name must differ from active profile when preserving current progress')) {
+        return {
+            message: 'Fresh profile name must differ from the active profile.',
+            hint: 'Use a different new profile name before saving current progress.',
+        };
+    }
+
     if (lowered.includes('access is denied') || lowered.includes('being used by another process')) {
         return {
             message: 'Files are currently locked by another process.',
@@ -300,13 +314,14 @@ function App() {
     const canApplyPath = saveGamePathInput.trim() !== '';
     const canPrepareFresh = freshProfileName.trim() !== '';
     const canExportBundle = exportProfileName.trim() !== '';
+    const canSwitchSelectedProfile = selectedProfileName.trim() !== '' && selectedProfileName !== activeProfile;
     const resolvedImportTarget = importTargetProfile === NEW_PROFILE_OPTION ? importTargetNewName.trim() : importTargetProfile.trim();
     const canImportBundle = resolvedImportTarget !== '' && importBundlePath.trim() !== '';
     const saveGamePathHealthItem = healthReport?.items.find((item) => item.name === 'savegame_path') ?? null;
     const needsSaveGamePathFix = saveGamePathHealthItem ? !saveGamePathHealthItem.ok : false;
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
     const needsProfilesFolderFix = healthReport?.items.some((item) => item.name === 'profiles_path' && !item.ok) ?? false;
-    const needsMarkerFileFix = markerHealthItem?.message.toLowerCase().includes('is missing') ?? false;
+    const needsMarkerFileFix = markerHealthItem ? !markerHealthItem.ok : false;
     const hasQuickActions = needsSaveGamePathFix || needsProfilesFolderFix || needsMarkerFileFix;
     const hasDiagnosticErrors = healthReport?.items.some((item) => item.severity === 'error') ?? false;
     const hasDiagnosticWarnings = healthReport?.items.some((item) => item.severity === 'warn') ?? false;
@@ -522,12 +537,39 @@ function App() {
             const result = await StartInAppUpdate(downloadUrl, releaseUrl) as UpdateInstallResult;
             const message = result.message?.trim() || 'Installer launched. Closing app to finish update...';
 
+            if (!result.started) {
+                const fallbackMessage = message || 'Installer did not start. Opening fallback release page.';
+                setStatus(fallbackMessage);
+                setRecoveryHint('In-app installer launch was not confirmed. Opening release page instead.');
+                setUpdateInstallLabel('Installing...');
+                setUpdateInstallPercent(null);
+                setUpdateInstallEta(null);
+                setUpdateInstallSpeed(null);
+                setIsSlowNetworkHintVisible(false);
+                updateSpeedTrackerRef.current = {lastAtMs: 0, lastBytes: 0, smoothedBps: 0, slowSinceMs: 0};
+
+                const fallbackUrl = (result.fallbackUrl || releaseUrl || downloadUrl).trim();
+                if (fallbackUrl) {
+                    await onOpenUpdateLink(fallbackUrl, 'release page');
+                }
+
+                setIsLoading(false);
+                setIsUpdateInstalling(false);
+                return;
+            }
+
             setStatus(message);
             showToast(message, 'info');
 
             window.setTimeout(() => {
                 void Quit();
             }, 1400);
+
+            window.setTimeout(() => {
+                setIsLoading(false);
+                setIsUpdateInstalling(false);
+                setRecoveryHint('If the installer did not open, use the update button again or open the release page.');
+            }, 7000);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'In-app update failed');
             setStatus(feedback.message);
@@ -719,10 +761,25 @@ function App() {
             return;
         }
 
+        const currentActive = activeProfile.trim();
+        const isSameAsActive = currentActive.toLowerCase() === name.toLowerCase();
+
+        if (preserveCurrent && !currentActive) {
+            setStatus('Save first requires an active profile. Set one from Diagnostics first.');
+            setRecoveryHint('Open Diagnostics and use Set active profile, then retry Start New Save.');
+            return;
+        }
+
+        if (preserveCurrent && isSameAsActive) {
+            setStatus('Fresh profile name must differ from the current active profile when saving first.');
+            setRecoveryHint('Choose a different name for the new profile, then retry.');
+            return;
+        }
+
         try {
             setIsLoading(true);
             setStatus(preserveCurrent
-                ? `Saving current progress and starting new save ${name}...`
+                ? `Saving current progress into ${currentActive} and preparing fresh profile ${name}...`
                 : `Starting new save ${name} without saving current progress...`);
             setRecoveryHint('');
             if (preserveCurrent) {
@@ -736,7 +793,7 @@ function App() {
             setActiveProfile(name);
             await loadData();
             setStatus(preserveCurrent
-                ? `Current progress saved into ${name}. New save started and set active.`
+                ? `Current progress saved into ${currentActive}. Fresh profile ${name} is now active.`
                 : `Started new save ${name} without saving current root progress. Active profile updated.`);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Create profile failed');
@@ -914,6 +971,7 @@ function App() {
 
     function closeDiagnosticsModal() {
         setDiagnosticsModal(null);
+        setFirstSaveProfileName('');
     }
 
     function openExportModal() {
@@ -967,6 +1025,11 @@ function App() {
     }
 
     function closeActiveModal() {
+        if (isSavePathSetupOpen) {
+            setIsSavePathSetupOpen(false);
+            return;
+        }
+
         if (renameTarget) {
             closeRenameModal();
             return;
@@ -1368,10 +1431,11 @@ function App() {
                                         value={selectedProfileName}
                                         onChange={(event) => {
                                             const next = event.target.value;
-                                            setSelectedProfileName(next);
-                                            if (next && next !== activeProfile) {
-                                                void onSwitch(next);
+                                            if (!next) {
+                                                return;
                                             }
+
+                                            setSelectedProfileName(next);
                                         }}
                                         disabled={isLoading || isModalOpen}
                                         aria-label="Select profile"
@@ -1391,6 +1455,15 @@ function App() {
                                         </span>
                                     )}
                                 </div>
+                                <button
+                                    className="switch-btn"
+                                    onClick={() => void onSwitch(selectedProfileName)}
+                                    disabled={isLoading || isModalOpen || !canSwitchSelectedProfile}
+                                    aria-label="Switch to selected profile"
+                                >
+                                    <RefreshCw size={13} strokeWidth={2.1} />
+                                    Switch
+                                </button>
                                 <button
                                     className="switch-btn secondary"
                                     onClick={() => openRenameModal(selectedProfileName)}
@@ -1644,10 +1717,20 @@ function App() {
                     <div className="modal-card" onClick={(event) => event.stopPropagation()}>
                         <h3 id="fresh-confirm-modal-title">Start New Save</h3>
                         <p id="fresh-confirm-modal-description">
-                            Do you want to save your current progress into <strong>{freshConfirmProfileName}</strong> before starting fresh?
+                            Do you want to save your current progress into <strong>{activeProfile || 'your active profile'}</strong> before starting fresh with <strong>{freshConfirmProfileName}</strong>?
                         </p>
+                        {!activeProfile.trim() && (
+                            <p className="modal-note">
+                                Save first is unavailable until you set an active profile in Diagnostics.
+                            </p>
+                        )}
+                        {activeProfile.trim().toLowerCase() === freshConfirmProfileName.trim().toLowerCase() && freshConfirmProfileName.trim() && (
+                            <p className="modal-note">
+                                Choose a different fresh profile name to keep your current active profile backup separate.
+                            </p>
+                        )}
                         <p className="modal-note">
-                            Saving first backs up current <span className="path-token">savegame</span> and <span className="path-token">wraps</span> into that profile. Skipping starts fresh and discards the current root progress.
+                            Saving first updates your active profile backup with current <span className="path-token">savegame</span> and <span className="path-token">wraps</span>. Skipping starts fresh and discards the current root progress.
                         </p>
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeFreshConfirmModal} disabled={isLoading}>
@@ -1656,7 +1739,11 @@ function App() {
                             <button className="switch-btn secondary" onClick={() => void onConfirmPrepareFresh(false)} disabled={isLoading}>
                                 Skip save
                             </button>
-                            <button className="action-btn" onClick={() => void onConfirmPrepareFresh(true)} disabled={isLoading}>
+                            <button
+                                className="action-btn"
+                                onClick={() => void onConfirmPrepareFresh(true)}
+                                disabled={isLoading || !activeProfile.trim() || (activeProfile.trim().toLowerCase() === freshConfirmProfileName.trim().toLowerCase() && freshConfirmProfileName.trim() !== '')}
+                            >
                                 Save first
                             </button>
                         </div>
@@ -1723,18 +1810,6 @@ function App() {
                                             </button>
                                         </div>
                                     </>
-                                ) : !activeProfile.trim() ? (
-                                    <>
-                                        <p className="modal-note">No active profile marker detected. Save current progress first to preserve the current root data and set an active profile.</p>
-                                        <div className="modal-actions">
-                                            <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
-                                                Close
-                                            </button>
-                                            <button className="action-btn" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
-                                                Save Current Progress first
-                                            </button>
-                                        </div>
-                                    </>
                                 ) : profiles.length === 0 ? (
                                     <>
                                         <p className="modal-note">No profiles exist yet. Create one using Start New Save or Save Current Progress first.</p>
@@ -1749,6 +1824,9 @@ function App() {
                                     </>
                                 ) : (
                                     <>
+                                        {!activeProfile.trim() && (
+                                            <p className="modal-note">No active profile marker detected. Choose an existing profile below or save current progress first.</p>
+                                        )}
                                         <select
                                             value={markerDialogProfile}
                                             onChange={(event) => setMarkerDialogProfile(event.target.value)}
@@ -1766,6 +1844,11 @@ function App() {
                                             <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
                                                 Cancel
                                             </button>
+                                            {!activeProfile.trim() && (
+                                                <button className="switch-btn secondary" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
+                                                    Save Current Progress first
+                                                </button>
+                                            )}
                                             <button className="action-btn" onClick={() => void onCreateMarkerFile(markerDialogProfile)} disabled={isLoading || !markerDialogProfile.trim()}>
                                                 Set active profile
                                             </button>
