@@ -304,6 +304,7 @@ function App() {
     const [updateInstallSpeed, setUpdateInstallSpeed] = useState<string | null>(null);
     const [isSlowNetworkHintVisible, setIsSlowNetworkHintVisible] = useState(false);
     const [isSavePathSetupOpen, setIsSavePathSetupOpen] = useState(false);
+    const [switchConfirmProfile, setSwitchConfirmProfile] = useState<string | null>(null);
     const saveActionsRef = useRef<HTMLDivElement | null>(null);
     const importNewProfileRef = useRef<HTMLInputElement | null>(null);
     const toastTimerRef = useRef<number | null>(null);
@@ -316,12 +317,11 @@ function App() {
         slowSinceMs: 0,
     });
 
-    const isModalOpen = isSavePathSetupOpen || renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen || isFreshConfirmOpen;
+    const isModalOpen = isSavePathSetupOpen || switchConfirmProfile !== null || renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen || isFreshConfirmOpen;
 
     const canApplyPath = saveGamePathInput.trim() !== '';
     const canPrepareFresh = freshProfileName.trim() !== '';
     const canExportBundle = exportProfileName.trim() !== '';
-    const canSwitchSelectedProfile = selectedProfileName.trim() !== '' && selectedProfileName !== activeProfile;
     const resolvedImportTarget = importTargetProfile === NEW_PROFILE_OPTION ? importTargetNewName.trim() : importTargetProfile.trim();
     const canImportBundle = resolvedImportTarget !== '' && importBundlePath.trim() !== '';
     const saveGamePathHealthItem = healthReport?.items.find((item) => item.name === 'savegame_path') ?? null;
@@ -717,6 +717,8 @@ function App() {
     }
 
     async function onSwitch(profileName: string) {
+        const previousActive = activeProfile.trim();
+
         try {
             setStatus(`Switching to ${profileName}...`);
             setIsLoading(true);
@@ -729,9 +731,26 @@ function App() {
             const feedback = toErrorFeedback(error, 'Switch failed');
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
+            setSelectedProfileName(previousActive);
         } finally {
             setIsLoading(false);
         }
+    }
+
+    function closeSwitchConfirmModal() {
+        setSwitchConfirmProfile(null);
+        setSelectedProfileName(activeProfile.trim());
+    }
+
+    async function confirmSwitchProfileFromModal() {
+        const nextProfile = (switchConfirmProfile || '').trim();
+        if (!nextProfile) {
+            closeSwitchConfirmModal();
+            return;
+        }
+
+        setSwitchConfirmProfile(null);
+        await onSwitch(nextProfile);
     }
 
     async function onPrepareFresh() {
@@ -1027,6 +1046,11 @@ function App() {
             return;
         }
 
+        if (switchConfirmProfile) {
+            closeSwitchConfirmModal();
+            return;
+        }
+
         if (renameTarget) {
             closeRenameModal();
             return;
@@ -1215,7 +1239,7 @@ function App() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isModalOpen, isLoading, renameTarget, deleteTarget, diagnosticsModal, isExportModalOpen, isImportModalOpen, isFreshConfirmOpen]);
+    }, [isModalOpen, isLoading, switchConfirmProfile, renameTarget, deleteTarget, diagnosticsModal, isExportModalOpen, isImportModalOpen, isFreshConfirmOpen]);
 
     useEffect(() => {
         if (importTargetProfile === NEW_PROFILE_OPTION) {
@@ -1433,6 +1457,10 @@ function App() {
                                             }
 
                                             setSelectedProfileName(next);
+
+                                            if (next !== activeProfile) {
+                                                setSwitchConfirmProfile(next);
+                                            }
                                         }}
                                         disabled={isLoading || isModalOpen}
                                         aria-label="Select profile"
@@ -1452,15 +1480,6 @@ function App() {
                                         </span>
                                     )}
                                 </div>
-                                <button
-                                    className="switch-btn"
-                                    onClick={() => void onSwitch(selectedProfileName)}
-                                    disabled={isLoading || isModalOpen || !canSwitchSelectedProfile}
-                                    aria-label="Switch to selected profile"
-                                >
-                                    <RefreshCw size={13} strokeWidth={2.1} />
-                                    Switch
-                                </button>
                                 <button
                                     className="switch-btn secondary"
                                     onClick={() => openRenameModal(selectedProfileName)}
@@ -1742,6 +1761,26 @@ function App() {
                                 disabled={isLoading || !activeProfile.trim() || (activeProfile.trim().toLowerCase() === freshConfirmProfileName.trim().toLowerCase() && freshConfirmProfileName.trim() !== '')}
                             >
                                 Save first
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {switchConfirmProfile && (
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="switch-confirm-modal-title" aria-describedby="switch-confirm-modal-description">
+                    <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+                        <h3 id="switch-confirm-modal-title">Switch Active Profile</h3>
+                        <p id="switch-confirm-modal-description">
+                            Switch active profile from <strong>{activeProfile || 'None selected'}</strong> to <strong>{switchConfirmProfile}</strong>?
+                        </p>
+                        <p className="modal-note">This immediately loads the selected profile into your SaveGame root folders.</p>
+                        <div className="modal-actions">
+                            <button className="switch-btn secondary" onClick={closeSwitchConfirmModal} disabled={isLoading}>
+                                Cancel
+                            </button>
+                            <button className="action-btn" onClick={() => void confirmSwitchProfileFromModal()} disabled={isLoading}>
+                                {isLoading ? 'Switching...' : 'Switch profile'}
                             </button>
                         </div>
                     </div>
