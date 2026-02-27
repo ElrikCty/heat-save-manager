@@ -49,6 +49,10 @@ VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
 ManifestDPIAware true
 
 !include "MUI.nsh"
+!include "FileFunc.nsh"
+!include "LogicLib.nsh"
+
+Var AutoRestartAfterInstall
 
 !define MUI_ICON "..\icon.ico"
 !define MUI_UNICON "..\icon.ico"
@@ -76,6 +80,13 @@ InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}" # Default i
 ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
+   StrCpy $AutoRestartAfterInstall "0"
+   ${GetParameters} $R0
+   ${GetOptions} $R0 "/AUTORESTARTAPP" $R1
+   ${IfNot} ${Errors}
+      StrCpy $AutoRestartAfterInstall "1"
+   ${EndIf}
+
    !insertmacro wails.checkArchitecture
 FunctionEnd
 
@@ -95,6 +106,10 @@ Section
     !insertmacro wails.associateCustomProtocols
 
     !insertmacro wails.writeUninstaller
+
+    ${If} $AutoRestartAfterInstall == "1"
+        ExecShell "" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    ${EndIf}
 SectionEnd
 
 Section "uninstall"
