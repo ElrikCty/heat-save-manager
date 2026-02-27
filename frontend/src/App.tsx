@@ -14,6 +14,7 @@ import {
     ImportProfileBundle,
     ListProfiles,
     PickImportBundlePath,
+    PickSaveGamePath,
     PrepareFreshProfile,
     PrepareFreshProfileWithoutSave,
     OpenExternalURL,
@@ -611,6 +612,23 @@ function App() {
             setRecoveryHint(feedback.hint);
         } finally {
             setIsLoading(false);
+        }
+    }
+
+    async function onBrowseSaveGamePath() {
+        try {
+            const selectedPath = (await PickSaveGamePath()).trim();
+            if (!selectedPath) {
+                return;
+            }
+
+            setSaveGamePathInput(selectedPath);
+            setStatus('SaveGame path selected. Confirm path to apply.');
+            setRecoveryHint('');
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Could not open folder picker');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
         }
     }
 
@@ -1511,7 +1529,7 @@ function App() {
                                 Apply Path
                             </button>
                         </div>
-                        <p className="field-hint">Path must point directly to the <span className="path-token">SaveGame</span> folder.</p>
+                        <p className="field-hint">Path must point to <span className="path-token">Need for speed heat\SaveGame</span>.</p>
                     </div>
                 </section>
 
@@ -1598,6 +1616,13 @@ function App() {
                                 disabled={isLoading}
                             >
                                 Close for now
+                            </button>
+                            <button
+                                className="switch-btn secondary"
+                                onClick={() => void onBrowseSaveGamePath()}
+                                disabled={isLoading}
+                            >
+                                Browse...
                             </button>
                             <button
                                 className="switch-btn secondary"

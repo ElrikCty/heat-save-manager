@@ -24,6 +24,15 @@ func NewService(documentsRoot string) *Service {
 	return &Service{documentsRoot: documentsRoot}
 }
 
+func LocateDefault() (Paths, error) {
+	documentsRoot, err := detectDocumentsRoot()
+	if err != nil {
+		return Paths{}, err
+	}
+
+	return NewService(documentsRoot).Locate()
+}
+
 func (s *Service) Locate() (Paths, error) {
 	if s.documentsRoot == "" {
 		return Paths{}, ErrDocumentsRootRequired

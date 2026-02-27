@@ -88,13 +88,7 @@ type UpdateInstallResult struct {
 }
 
 func (a *App) initDefaultPaths() {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-
-	documentsPath := filepath.Join(home, "Documents")
-	paths, err := discovery.NewService(documentsPath).Locate()
+	paths, err := discovery.LocateDefault()
 	if err != nil {
 		return
 	}
@@ -401,6 +395,24 @@ func (a *App) PickImportBundlePath() (string, error) {
 		Filters: []runtime.FileFilter{
 			{DisplayName: "Zip Archive (*.zip)", Pattern: "*.zip"},
 		},
+	})
+}
+
+func (a *App) PickSaveGamePath() (string, error) {
+	if a.ctx == nil {
+		return "", errors.New("app context is not ready")
+	}
+
+	defaultDirectory := a.saveGamePath
+	if strings.TrimSpace(defaultDirectory) == "" {
+		if paths, err := discovery.LocateDefault(); err == nil {
+			defaultDirectory = paths.SaveGamePath
+		}
+	}
+
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "Select SaveGame Folder",
+		DefaultDirectory: defaultDirectory,
 	})
 }
 
