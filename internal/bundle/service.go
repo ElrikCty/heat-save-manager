@@ -21,18 +21,26 @@ var (
 	ErrBundleTooLarge       = errors.New("bundle exceeds import safety limits")
 )
 
-var (
-	maxBundleEntries          = 10_000
-	maxBundleFileBytes  int64 = 256 << 20
-	maxBundleTotalBytes int64 = 2 << 30
+const (
+	defaultMaxBundleEntries          = 10_000
+	defaultMaxBundleFileBytes  int64 = 256 << 20
+	defaultMaxBundleTotalBytes int64 = 2 << 30
 )
 
 type Service struct {
-	profilesPath string
+	profilesPath        string
+	maxBundleEntries    int
+	maxBundleFileBytes  int64
+	maxBundleTotalBytes int64
 }
 
 func NewService(profilesPath string) *Service {
-	return &Service{profilesPath: profilesPath}
+	return &Service{
+		profilesPath:        profilesPath,
+		maxBundleEntries:    defaultMaxBundleEntries,
+		maxBundleFileBytes:  defaultMaxBundleFileBytes,
+		maxBundleTotalBytes: defaultMaxBundleTotalBytes,
+	}
 }
 
 func (s *Service) ExportProfile(profileName string, bundlePath string) error {
@@ -145,7 +153,7 @@ func (s *Service) ImportProfile(profileName string, bundlePath string) error {
 	}
 	defer os.RemoveAll(stagingRoot)
 
-	if err := extractBundleToProfileRoot(reader.File, stagingRoot); err != nil {
+	if err := s.extractBundleToProfileRoot(reader.File, stagingRoot); err != nil {
 		return err
 	}
 
@@ -156,8 +164,8 @@ func (s *Service) ImportProfile(profileName string, bundlePath string) error {
 	return replaceProfileRootAtomic(profileRoot, stagingRoot)
 }
 
-func extractBundleToProfileRoot(files []*zip.File, profileRoot string) error {
-	if len(files) > maxBundleEntries {
+func (s *Service) extractBundleToProfileRoot(files []*zip.File, profileRoot string) error {
+	if len(files) > s.maxBundleEntries {
 		return ErrBundleTooLarge
 	}
 
@@ -194,7 +202,7 @@ func extractBundleToProfileRoot(files []*zip.File, profileRoot string) error {
 			return err
 		}
 
-		limited := &io.LimitedReader{R: in, N: maxBundleFileBytes + 1}
+		limited := &io.LimitedReader{R: in, N: s.maxBundleFileBytes + 1}
 		written, copyErr := io.Copy(out, limited)
 		if copyErr != nil {
 			in.Close()
@@ -202,14 +210,14 @@ func extractBundleToProfileRoot(files []*zip.File, profileRoot string) error {
 			return copyErr
 		}
 
-		if written > maxBundleFileBytes {
+		if written > s.maxBundleFileBytes {
 			in.Close()
 			out.Close()
 			return ErrBundleTooLarge
 		}
 
 		totalUncompressedBytes += written
-		if totalUncompressedBytes > maxBundleTotalBytes {
+		if totalUncompressedBytes > s.maxBundleTotalBytes {
 			in.Close()
 			out.Close()
 			return ErrBundleTooLarge

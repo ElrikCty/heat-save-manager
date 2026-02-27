@@ -113,18 +113,13 @@ func TestImportProfileRejectsOversizedEntryCountAndKeepsExistingData(t *testing.
 	writeFile(t, filepath.Join(profileRoot, "savegame", "slot.sav"), "original-save")
 	writeFile(t, filepath.Join(profileRoot, "wraps", "wrap.txt"), "original-wrap")
 
-	originalLimit := maxBundleEntries
-	maxBundleEntries = 1
-	t.Cleanup(func() {
-		maxBundleEntries = originalLimit
-	})
-
 	createZipWithEntries(t, bundlePath, map[string]string{
 		"savegame/slot.sav": "save-data",
 		"wraps/wrap.txt":    "wrap-data",
 	})
 
 	svc := NewService(profilesPath)
+	svc.maxBundleEntries = 1
 	err := svc.ImportProfile("ProfileBomb", bundlePath)
 	if !errors.Is(err, ErrBundleTooLarge) {
 		t.Fatalf("expected ErrBundleTooLarge, got %v", err)
