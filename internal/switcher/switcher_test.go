@@ -115,6 +115,36 @@ func TestSwitchRollsBackWhenSecondReplaceFails(t *testing.T) {
 	assertBackupRootMissing(t, saveGamePath)
 }
 
+func TestSwitchRollsBackWhenFirstReplaceFailsAfterDelete(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+	profileName := "ProfileFirstReplaceFail"
+
+	createProfile(t, profilesPath, profileName, "new-save", "new-wrap")
+	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "old-save")
+	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "old-wrap")
+
+	failingOps := &failOnFirstReplaceAfterDeleteOps{base: fsops.NewLocal()}
+	service := NewService(saveGamePath, profilesPath, marker.NewStore(saveGamePath), failingOps)
+	service.now = func() time.Time { return time.Date(2026, 2, 15, 12, 2, 30, 0, time.UTC) }
+
+	result, err := service.Switch(Params{ProfileName: profileName})
+	if err == nil {
+		t.Fatal("expected switch to fail")
+	}
+
+	if !result.RolledBack {
+		t.Fatal("expected RolledBack=true")
+	}
+
+	assertFileContent(t, filepath.Join(saveGamePath, "savegame", "slot.sav"), "old-save")
+	assertFileContent(t, filepath.Join(saveGamePath, "wraps", "wrap.txt"), "old-wrap")
+	assertBackupRootMissing(t, saveGamePath)
+}
+
 func TestSwitchRollsBackWhenOriginalDirsDidNotExist(t *testing.T) {
 	t.Parallel()
 
@@ -204,6 +234,40 @@ func (f *failOnSecondReplaceOps) ReplaceDir(source string, destination string) e
 }
 
 func (f *failOnSecondReplaceOps) RemoveDir(path string) error {
+	return f.base.RemoveDir(path)
+}
+
+type failOnFirstReplaceAfterDeleteOps struct {
+	base         *fsops.Local
+	replaceCalls int
+}
+
+func (f *failOnFirstReplaceAfterDeleteOps) CopyDir(source string, destination string) error {
+	return f.base.CopyDir(source, destination)
+}
+
+func (f *failOnFirstReplaceAfterDeleteOps) ReplaceDir(source string, destination string) error {
+	f.replaceCalls++
+	if f.replaceCalls == 1 {
+		tmpDir := destination + ".forced-failure"
+		if err := os.RemoveAll(tmpDir); err != nil {
+			return err
+		}
+		if err := f.base.CopyDir(source, tmpDir); err != nil {
+			return err
+		}
+		if err := os.RemoveAll(destination); err != nil {
+			_ = os.RemoveAll(tmpDir)
+			return err
+		}
+		_ = os.RemoveAll(tmpDir)
+		return errors.New("forced first replace failure after deleting destination")
+	}
+
+	return f.base.ReplaceDir(source, destination)
+}
+
+func (f *failOnFirstReplaceAfterDeleteOps) RemoveDir(path string) error {
 	return f.base.RemoveDir(path)
 }
 

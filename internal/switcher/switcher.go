@@ -102,8 +102,12 @@ func (s *Service) Switch(params Params) (Result, error) {
 	profileWraps := filepath.Join(profileRoot, wrapsDirName)
 
 	if err := s.ops.ReplaceDir(profileSavegame, targetSavegame); err != nil {
-		_ = s.ops.RemoveDir(backupRoot)
-		return Result{}, err
+		rollbackErr := s.rollback(targetSavegame, targetWraps, backupSavegame, backupWraps, hadSavegame, hadWraps)
+		if rollbackErr != nil {
+			return Result{ProfileName: profileName, RolledBack: true}, fmt.Errorf("switch failed: %w; rollback failed: %v", err, rollbackErr)
+		}
+
+		return Result{ProfileName: profileName, RolledBack: true}, err
 	}
 
 	if err := s.ops.ReplaceDir(profileWraps, targetWraps); err != nil {

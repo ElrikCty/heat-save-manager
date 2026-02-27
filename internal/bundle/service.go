@@ -3,10 +3,12 @@ package bundle
 import (
 	"archive/zip"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"heat-save-manager/internal/profiles"
 )
@@ -121,29 +123,47 @@ func (s *Service) ImportProfile(profileName string, bundlePath string) error {
 	}
 	defer reader.Close()
 
+	if err := os.MkdirAll(s.profilesPath, 0o755); err != nil {
+		return err
+	}
+
 	profileRoot := filepath.Join(s.profilesPath, name)
-	if err := os.RemoveAll(profileRoot); err != nil {
+	stagingRoot, err := os.MkdirTemp(s.profilesPath, name+".import-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stagingRoot)
+
+	if err := extractBundleToProfileRoot(reader.File, stagingRoot); err != nil {
 		return err
 	}
 
-	if err := os.MkdirAll(profileRoot, 0o755); err != nil {
+	if err := profiles.ValidateLayout(stagingRoot); err != nil {
 		return err
 	}
 
-	for _, f := range reader.File {
+	return replaceProfileRootAtomic(profileRoot, stagingRoot)
+}
+
+func extractBundleToProfileRoot(files []*zip.File, profileRoot string) error {
+	root := filepath.Clean(profileRoot)
+	rootPrefix := root + string(os.PathSeparator)
+
+	for _, f := range files {
 		targetPath := filepath.Join(profileRoot, filepath.FromSlash(f.Name))
-		if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(profileRoot)+string(os.PathSeparator)) {
+		cleanTargetPath := filepath.Clean(targetPath)
+		if cleanTargetPath != root && !strings.HasPrefix(cleanTargetPath, rootPrefix) {
 			return errors.New("bundle contains invalid file path")
 		}
 
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(targetPath, 0o755); err != nil {
+			if err := os.MkdirAll(cleanTargetPath, 0o755); err != nil {
 				return err
 			}
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(cleanTargetPath), 0o755); err != nil {
 			return err
 		}
 
@@ -152,7 +172,7 @@ func (s *Service) ImportProfile(profileName string, bundlePath string) error {
 			return err
 		}
 
-		out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, f.Mode())
+		out, err := os.OpenFile(cleanTargetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, f.Mode())
 		if err != nil {
 			in.Close()
 			return err
@@ -174,7 +194,45 @@ func (s *Service) ImportProfile(profileName string, bundlePath string) error {
 		}
 	}
 
-	return profiles.ValidateLayout(profileRoot)
+	return nil
+}
+
+func replaceProfileRootAtomic(profileRoot string, stagingRoot string) error {
+	backupRoot := profileRoot + ".backup-" + time.Now().UTC().Format("20060102-150405.000000000")
+	hadExisting := false
+
+	if info, err := os.Stat(profileRoot); err == nil {
+		if !info.IsDir() {
+			return fmt.Errorf("profile path exists but is not a directory: %s", profileRoot)
+		}
+		hadExisting = true
+		if err := os.RemoveAll(backupRoot); err != nil {
+			return err
+		}
+		if err := os.Rename(profileRoot, backupRoot); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.Rename(stagingRoot, profileRoot); err != nil {
+		if hadExisting {
+			if rollbackErr := os.Rename(backupRoot, profileRoot); rollbackErr != nil {
+				return fmt.Errorf("replace profile failed: %w; rollback failed: %v", err, rollbackErr)
+			}
+		}
+
+		return err
+	}
+
+	if hadExisting {
+		if err := os.RemoveAll(backupRoot); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func validateProfileName(profileName string) (string, error) {
