@@ -95,6 +95,19 @@ func TestStartRejectsNonInstallerAsset(t *testing.T) {
 	}
 }
 
+func TestStartRejectsNonHTTPSInstallerURL(t *testing.T) {
+	svc := NewService(t.TempDir(), &launcherStub{})
+
+	_, err := svc.Start(context.Background(), "http://example.com/HeatSaveManager-v1.0.5-windows-x64-installer.exe", "https://example.com/release")
+	if err == nil {
+		t.Fatalf("expected an error for non-https installer url")
+	}
+
+	if !strings.Contains(strings.ToLower(err.Error()), "https") {
+		t.Fatalf("expected https validation error, got %q", err)
+	}
+}
+
 func TestStartFailsWhenLauncherFails(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
