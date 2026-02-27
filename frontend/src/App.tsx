@@ -130,6 +130,20 @@ function toErrorFeedback(error: unknown, fallback: string): ErrorFeedback {
         };
     }
 
+    if (lowered.includes('active profile marker is required to preserve current progress')) {
+        return {
+            message: 'Save-first needs an active profile first.',
+            hint: 'Set an active profile from Diagnostics, then retry Start New Save.',
+        };
+    }
+
+    if (lowered.includes('new profile name must differ from active profile when preserving current progress')) {
+        return {
+            message: 'Fresh profile name must differ from the active profile.',
+            hint: 'Use a different new profile name before saving current progress.',
+        };
+    }
+
     if (lowered.includes('access is denied') || lowered.includes('being used by another process')) {
         return {
             message: 'Files are currently locked by another process.',
@@ -719,10 +733,25 @@ function App() {
             return;
         }
 
+        const currentActive = activeProfile.trim();
+        const isSameAsActive = currentActive.toLowerCase() === name.toLowerCase();
+
+        if (preserveCurrent && !currentActive) {
+            setStatus('Save first requires an active profile. Set one from Diagnostics first.');
+            setRecoveryHint('Open Diagnostics and use Set active profile, then retry Start New Save.');
+            return;
+        }
+
+        if (preserveCurrent && isSameAsActive) {
+            setStatus('Fresh profile name must differ from the current active profile when saving first.');
+            setRecoveryHint('Choose a different name for the new profile, then retry.');
+            return;
+        }
+
         try {
             setIsLoading(true);
             setStatus(preserveCurrent
-                ? `Saving current progress and starting new save ${name}...`
+                ? `Saving current progress into ${currentActive} and preparing fresh profile ${name}...`
                 : `Starting new save ${name} without saving current progress...`);
             setRecoveryHint('');
             if (preserveCurrent) {
@@ -736,7 +765,7 @@ function App() {
             setActiveProfile(name);
             await loadData();
             setStatus(preserveCurrent
-                ? `Current progress saved into ${name}. New save started and set active.`
+                ? `Current progress saved into ${currentActive}. Fresh profile ${name} is now active.`
                 : `Started new save ${name} without saving current root progress. Active profile updated.`);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Create profile failed');
@@ -1644,10 +1673,20 @@ function App() {
                     <div className="modal-card" onClick={(event) => event.stopPropagation()}>
                         <h3 id="fresh-confirm-modal-title">Start New Save</h3>
                         <p id="fresh-confirm-modal-description">
-                            Do you want to save your current progress into <strong>{freshConfirmProfileName}</strong> before starting fresh?
+                            Do you want to save your current progress into <strong>{activeProfile || 'your active profile'}</strong> before starting fresh with <strong>{freshConfirmProfileName}</strong>?
                         </p>
+                        {!activeProfile.trim() && (
+                            <p className="modal-note">
+                                Save first is unavailable until you set an active profile in Diagnostics.
+                            </p>
+                        )}
+                        {activeProfile.trim().toLowerCase() === freshConfirmProfileName.trim().toLowerCase() && freshConfirmProfileName.trim() && (
+                            <p className="modal-note">
+                                Choose a different fresh profile name to keep your current active profile backup separate.
+                            </p>
+                        )}
                         <p className="modal-note">
-                            Saving first backs up current <span className="path-token">savegame</span> and <span className="path-token">wraps</span> into that profile. Skipping starts fresh and discards the current root progress.
+                            Saving first updates your active profile backup with current <span className="path-token">savegame</span> and <span className="path-token">wraps</span>. Skipping starts fresh and discards the current root progress.
                         </p>
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeFreshConfirmModal} disabled={isLoading}>
@@ -1656,7 +1695,11 @@ function App() {
                             <button className="switch-btn secondary" onClick={() => void onConfirmPrepareFresh(false)} disabled={isLoading}>
                                 Skip save
                             </button>
-                            <button className="action-btn" onClick={() => void onConfirmPrepareFresh(true)} disabled={isLoading}>
+                            <button
+                                className="action-btn"
+                                onClick={() => void onConfirmPrepareFresh(true)}
+                                disabled={isLoading || !activeProfile.trim() || (activeProfile.trim().toLowerCase() === freshConfirmProfileName.trim().toLowerCase() && freshConfirmProfileName.trim() !== '')}
+                            >
                                 Save first
                             </button>
                         </div>

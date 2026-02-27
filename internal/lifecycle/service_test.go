@@ -10,7 +10,7 @@ import (
 	"heat-save-manager/internal/marker"
 )
 
-func TestPrepareFreshProfileSavesRootIntoProfileAndUpdatesMarker(t *testing.T) {
+func TestPrepareFreshProfilePreserveUpdatesActiveAndCreatesFreshProfile(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -21,14 +21,20 @@ func TestPrepareFreshProfileSavesRootIntoProfileAndUpdatesMarker(t *testing.T) {
 	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "old-wrap")
 
 	store := marker.NewStore(saveGamePath)
+	if err := store.WriteActiveProfile("current-main"); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
 	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
 
 	if err := svc.PrepareFreshProfile("fresh-01"); err != nil {
 		t.Fatalf("prepare fresh profile: %v", err)
 	}
 
-	assertFileContent(t, filepath.Join(profilesPath, "fresh-01", "savegame", "slot.sav"), "old-save")
-	assertFileContent(t, filepath.Join(profilesPath, "fresh-01", "wraps", "wrap.txt"), "old-wrap")
+	assertFileContent(t, filepath.Join(profilesPath, "current-main", "savegame", "slot.sav"), "old-save")
+	assertFileContent(t, filepath.Join(profilesPath, "current-main", "wraps", "wrap.txt"), "old-wrap")
+	assertDirEmpty(t, filepath.Join(profilesPath, "fresh-01", "savegame"))
+	assertDirEmpty(t, filepath.Join(profilesPath, "fresh-01", "wraps"))
 	assertDirEmpty(t, filepath.Join(saveGamePath, "savegame"))
 	assertDirEmpty(t, filepath.Join(saveGamePath, "wraps"))
 
@@ -39,6 +45,45 @@ func TestPrepareFreshProfileSavesRootIntoProfileAndUpdatesMarker(t *testing.T) {
 
 	if active != "fresh-01" {
 		t.Fatalf("expected active profile fresh-01, got %q", active)
+	}
+}
+
+func TestPrepareFreshProfilePreserveRequiresActiveMarker(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+
+	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "old-save")
+	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "old-wrap")
+
+	svc := NewService(saveGamePath, profilesPath, marker.NewStore(saveGamePath), fsops.NewLocal())
+	err := svc.PrepareFreshProfile("fresh-01")
+	if !errors.Is(err, ErrActiveProfileRequired) {
+		t.Fatalf("expected ErrActiveProfileRequired, got %v", err)
+	}
+}
+
+func TestPrepareFreshProfilePreserveRejectsSameAsActiveName(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+
+	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "old-save")
+	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "old-wrap")
+
+	store := marker.NewStore(saveGamePath)
+	if err := store.WriteActiveProfile("fresh-01"); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
+	err := svc.PrepareFreshProfile("fresh-01")
+	if !errors.Is(err, ErrFreshProfileNameConflict) {
+		t.Fatalf("expected ErrFreshProfileNameConflict, got %v", err)
 	}
 }
 

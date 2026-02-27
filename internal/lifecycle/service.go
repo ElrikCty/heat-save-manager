@@ -13,6 +13,8 @@ import (
 var (
 	ErrProfileNameRequired       = errors.New("profile name is required")
 	ErrProfileNameInvalid        = errors.New("profile name contains invalid characters")
+	ErrActiveProfileRequired     = errors.New("active profile marker is required to preserve current progress")
+	ErrFreshProfileNameConflict  = errors.New("new profile name must differ from active profile when preserving current progress")
 	ErrSaveGamePathRequired      = errors.New("savegame path is required")
 	ErrProfilesPathRequired      = errors.New("profiles path is required")
 	ErrMarkerStoreRequired       = errors.New("marker store is required")
@@ -69,7 +71,25 @@ func (s *Service) prepareFreshProfile(profileName string, preserveCurrent bool) 
 	}
 
 	if preserveCurrent {
-		if err := s.SaveCurrentProfile(name); err != nil {
+		activeProfile, err := s.marker.ReadActiveProfile()
+		if err != nil {
+			if os.IsNotExist(err) {
+				return ErrActiveProfileRequired
+			}
+
+			return err
+		}
+
+		activeName, err := validateProfileName(activeProfile)
+		if err != nil {
+			return ErrActiveProfileRequired
+		}
+
+		if strings.EqualFold(activeName, name) {
+			return ErrFreshProfileNameConflict
+		}
+
+		if err := s.SaveCurrentProfile(activeName); err != nil {
 			return err
 		}
 	}
@@ -82,10 +102,8 @@ func (s *Service) prepareFreshProfile(profileName string, preserveCurrent bool) 
 		return err
 	}
 
-	if !preserveCurrent {
-		if err := s.SaveCurrentProfile(name); err != nil {
-			return err
-		}
+	if err := s.SaveCurrentProfile(name); err != nil {
+		return err
 	}
 
 	return s.marker.WriteActiveProfile(name)
