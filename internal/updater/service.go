@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -323,6 +324,12 @@ func sanitizeFileName(name string) string {
 type execLauncher struct{}
 
 func (e execLauncher) Start(installerPath string) error {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", "Start-Process -FilePath $env:HSM_INSTALLER_PATH -Verb RunAs")
+		cmd.Env = append(os.Environ(), "HSM_INSTALLER_PATH="+installerPath)
+		return cmd.Run()
+	}
+
 	cmd := exec.Command(installerPath)
 	return cmd.Start()
 }

@@ -151,6 +151,13 @@ function toErrorFeedback(error: unknown, fallback: string): ErrorFeedback {
         };
     }
 
+    if (lowered.includes('requires elevation') || lowered.includes('requested operation requires elevation')) {
+        return {
+            message: 'Installer requires administrator approval.',
+            hint: 'Approve the Windows UAC prompt to continue in-app update install.',
+        };
+    }
+
     if (lowered.includes('bundle contains invalid file path')) {
         return {
             message: 'Bundle file is unsafe or malformed.',
@@ -540,18 +547,13 @@ function App() {
             if (!result.started) {
                 const fallbackMessage = message || 'Installer did not start. Opening fallback release page.';
                 setStatus(fallbackMessage);
-                setRecoveryHint('In-app installer launch was not confirmed. Opening release page instead.');
+                setRecoveryHint('In-app installer launch was not confirmed. Use View release if you want to install from browser.');
                 setUpdateInstallLabel('Installing...');
                 setUpdateInstallPercent(null);
                 setUpdateInstallEta(null);
                 setUpdateInstallSpeed(null);
                 setIsSlowNetworkHintVisible(false);
                 updateSpeedTrackerRef.current = {lastAtMs: 0, lastBytes: 0, smoothedBps: 0, slowSinceMs: 0};
-
-                const fallbackUrl = (result.fallbackUrl || releaseUrl || downloadUrl).trim();
-                if (fallbackUrl) {
-                    await onOpenUpdateLink(fallbackUrl, 'release page');
-                }
 
                 setIsLoading(false);
                 setIsUpdateInstalling(false);
@@ -573,18 +575,13 @@ function App() {
         } catch (error) {
             const feedback = toErrorFeedback(error, 'In-app update failed');
             setStatus(feedback.message);
-            setRecoveryHint(feedback.hint || 'Opening release page in your browser as fallback.');
+            setRecoveryHint(feedback.hint || 'Use View release if you want to install from browser.');
             setUpdateInstallLabel('Installing...');
             setUpdateInstallPercent(null);
             setUpdateInstallEta(null);
             setUpdateInstallSpeed(null);
             setIsSlowNetworkHintVisible(false);
             updateSpeedTrackerRef.current = {lastAtMs: 0, lastBytes: 0, smoothedBps: 0, slowSinceMs: 0};
-
-            const fallbackUrl = releaseUrl || downloadUrl;
-            if (fallbackUrl) {
-                await onOpenUpdateLink(fallbackUrl, 'release page');
-            }
 
             setIsLoading(false);
             setIsUpdateInstalling(false);
