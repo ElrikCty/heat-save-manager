@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CircleX, Download, Edit3, FileText, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Save, Trash2, Upload, Zap} from 'lucide-react';
 import './App.css';
+import {EventsOn, Quit} from '../wailsjs/runtime/runtime';
 import {
     CheckForUpdates,
     CreateMarkerFile,
@@ -19,6 +20,7 @@ import {
     RenameProfile,
     SaveCurrentProfile,
     SetSaveGamePath,
+    StartInAppUpdate,
     SwitchProfile,
     RunHealthCheck,
 } from '../wailsjs/go/main/App';
@@ -48,6 +50,20 @@ type UpdateInfo = {
     downloadUrl: string;
     publishedAt: string;
     notes: string;
+};
+
+type UpdateInstallResult = {
+    started: boolean;
+    message: string;
+    fallbackUrl: string;
+};
+
+type UpdateProgressEvent = {
+    stage?: string;
+    message?: string;
+    downloadedBytes?: number;
+    totalBytes?: number;
+    percent?: number;
 };
 
 type ErrorFeedback = {
@@ -171,6 +187,59 @@ function getDiagnosticItemIcon(name: string) {
     }
 }
 
+function formatBytes(size: number): string {
+    if (!Number.isFinite(size) || size < 0) {
+        return '0 B';
+    }
+
+    if (size < 1024) {
+        return `${Math.round(size)} B`;
+    }
+
+    if (size < 1024 * 1024) {
+        return `${(size / 1024).toFixed(1)} KB`;
+    }
+
+    if (size < 1024 * 1024 * 1024) {
+        return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatEta(totalSeconds: number): string {
+    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
+        return 'ETA <1s';
+    }
+
+    const rounded = Math.max(1, Math.round(totalSeconds));
+    const hours = Math.floor(rounded / 3600);
+    const minutes = Math.floor((rounded % 3600) / 60);
+    const seconds = rounded % 60;
+
+    if (hours > 0) {
+        return `ETA ${hours}h ${minutes}m`;
+    }
+
+    if (minutes > 0) {
+        return `ETA ${minutes}m ${seconds}s`;
+    }
+
+    return `ETA ${seconds}s`;
+}
+
+function formatRate(bytesPerSecond: number): string {
+    if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) {
+        return '';
+    }
+
+    return `${formatBytes(bytesPerSecond)}/s`;
+}
+
+const updateProgressEventName = 'updater:progress';
+const slowNetworkThresholdBps = 256 * 1024;
+const slowNetworkDelayMs = 5000;
+
 function App() {
     type ToastKind = 'success' | 'info' | 'error';
     const [saveGamePath, setSaveGamePath] = useState('');
@@ -206,11 +275,23 @@ function App() {
     const [appVersion, setAppVersion] = useState('');
     const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
     const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
+    const [isUpdateInstalling, setIsUpdateInstalling] = useState(false);
+    const [updateInstallLabel, setUpdateInstallLabel] = useState('Installing...');
+    const [updateInstallPercent, setUpdateInstallPercent] = useState<number | null>(null);
+    const [updateInstallEta, setUpdateInstallEta] = useState<string | null>(null);
+    const [updateInstallSpeed, setUpdateInstallSpeed] = useState<string | null>(null);
+    const [isSlowNetworkHintVisible, setIsSlowNetworkHintVisible] = useState(false);
     const saveActionsRef = useRef<HTMLDivElement | null>(null);
     const importNewProfileRef = useRef<HTMLInputElement | null>(null);
     const toastTimerRef = useRef<number | null>(null);
     const lastStatusToastRef = useRef('');
     const lastRecoveryToastRef = useRef('');
+    const updateSpeedTrackerRef = useRef({
+        lastAtMs: 0,
+        lastBytes: 0,
+        smoothedBps: 0,
+        slowSinceMs: 0,
+    });
 
     const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen || isFreshConfirmOpen;
 
@@ -403,6 +484,66 @@ function App() {
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         }
+    }
+
+    async function onInstallUpdate() {
+        const downloadUrl = (updateInfo?.downloadUrl || '').trim();
+        const releaseUrl = (updateInfo?.releaseUrl || '').trim();
+
+        if (!downloadUrl) {
+            await onOpenUpdateLink(releaseUrl, 'release page');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            setIsUpdateInstalling(true);
+            setUpdateInstallLabel('Downloading...');
+            setUpdateInstallPercent(0);
+            setUpdateInstallEta(null);
+            setUpdateInstallSpeed(null);
+            setIsSlowNetworkHintVisible(false);
+            updateSpeedTrackerRef.current = {lastAtMs: 0, lastBytes: 0, smoothedBps: 0, slowSinceMs: 0};
+            setStatus('Downloading installer update...');
+            setRecoveryHint('');
+
+            const result = await StartInAppUpdate(downloadUrl, releaseUrl) as UpdateInstallResult;
+            const message = result.message?.trim() || 'Installer launched. Closing app to finish update...';
+
+            setStatus(message);
+            showToast(message, 'info');
+
+            window.setTimeout(() => {
+                void Quit();
+            }, 1400);
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'In-app update failed');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint || 'Opening release page in your browser as fallback.');
+            setUpdateInstallLabel('Installing...');
+            setUpdateInstallPercent(null);
+            setUpdateInstallEta(null);
+            setUpdateInstallSpeed(null);
+            setIsSlowNetworkHintVisible(false);
+            updateSpeedTrackerRef.current = {lastAtMs: 0, lastBytes: 0, smoothedBps: 0, slowSinceMs: 0};
+
+            const fallbackUrl = releaseUrl || downloadUrl;
+            if (fallbackUrl) {
+                await onOpenUpdateLink(fallbackUrl, 'release page');
+            }
+
+            setIsLoading(false);
+            setIsUpdateInstalling(false);
+        }
+    }
+
+    async function onUpdatePrimaryAction() {
+        if (isInstallerUpdate) {
+            await onInstallUpdate();
+            return;
+        }
+
+        await onOpenUpdateLink(updateInfo?.downloadUrl || updateInfo?.releaseUrl || '', 'update download');
     }
 
     async function onRunHealthCheck() {
@@ -855,6 +996,123 @@ function App() {
     }, []);
 
     useEffect(() => {
+        const unsubscribe = EventsOn(updateProgressEventName, (payload: UpdateProgressEvent) => {
+            const stage = (payload?.stage || '').trim().toLowerCase();
+            const message = (payload?.message || '').trim();
+            const downloadedBytes = Math.max(0, Number(payload?.downloadedBytes || 0));
+            const totalBytes = Math.max(0, Number(payload?.totalBytes || 0));
+            const rawPercent = Number(payload?.percent);
+            const normalizedPercent = Number.isFinite(rawPercent)
+                ? Math.max(0, Math.min(100, Math.round(rawPercent)))
+                : null;
+
+            if (message && stage !== 'downloading') {
+                setStatus(message);
+            }
+
+            if (stage === 'validating' || stage === 'downloading' || stage === 'downloaded' || stage === 'launching') {
+                setIsLoading(true);
+                setIsUpdateInstalling(true);
+                setRecoveryHint('');
+
+                if (stage === 'downloading') {
+                    const bytesLabel = totalBytes > 0
+                        ? `Downloading ${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}`
+                        : `Downloading ${formatBytes(downloadedBytes)}`;
+                    setUpdateInstallLabel(bytesLabel);
+                    setUpdateInstallPercent(normalizedPercent);
+
+                    if (totalBytes > 0) {
+                        const nowMs = Date.now();
+                        const tracker = updateSpeedTrackerRef.current;
+
+                        if (tracker.lastAtMs > 0 && downloadedBytes >= tracker.lastBytes) {
+                            const deltaBytes = downloadedBytes - tracker.lastBytes;
+                            const deltaSeconds = (nowMs - tracker.lastAtMs) / 1000;
+
+                            if (deltaBytes > 0 && deltaSeconds > 0.05) {
+                                const instantBps = deltaBytes / deltaSeconds;
+                                tracker.smoothedBps = tracker.smoothedBps > 0
+                                    ? tracker.smoothedBps * 0.72 + instantBps * 0.28
+                                    : instantBps;
+                            }
+                        }
+
+                        tracker.lastAtMs = nowMs;
+                        tracker.lastBytes = downloadedBytes;
+
+                        if (tracker.smoothedBps > 0) {
+                            const remainingBytes = Math.max(0, totalBytes - downloadedBytes);
+                            setUpdateInstallSpeed(formatRate(tracker.smoothedBps));
+                            setUpdateInstallEta(formatEta(remainingBytes / tracker.smoothedBps));
+
+                            const isSlowSpeed = tracker.smoothedBps < slowNetworkThresholdBps && downloadedBytes < totalBytes;
+                            if (isSlowSpeed) {
+                                if (tracker.slowSinceMs === 0) {
+                                    tracker.slowSinceMs = nowMs;
+                                }
+
+                                setIsSlowNetworkHintVisible(nowMs - tracker.slowSinceMs >= slowNetworkDelayMs);
+                            } else {
+                                tracker.slowSinceMs = 0;
+                                setIsSlowNetworkHintVisible(false);
+                            }
+                        } else {
+                            setUpdateInstallSpeed(null);
+                            setUpdateInstallEta(null);
+                            setIsSlowNetworkHintVisible(false);
+                            tracker.slowSinceMs = 0;
+                        }
+                    } else {
+                        setUpdateInstallSpeed(null);
+                        setUpdateInstallEta(null);
+                        setIsSlowNetworkHintVisible(false);
+                        updateSpeedTrackerRef.current.slowSinceMs = 0;
+                    }
+                } else if (stage === 'validating') {
+                    setUpdateInstallLabel('Validating update...');
+                    setUpdateInstallPercent(null);
+                    setUpdateInstallEta(null);
+                    setUpdateInstallSpeed(null);
+                    setIsSlowNetworkHintVisible(false);
+                    updateSpeedTrackerRef.current = {lastAtMs: 0, lastBytes: 0, smoothedBps: 0, slowSinceMs: 0};
+                } else if (stage === 'downloaded' || stage === 'launching') {
+                    setUpdateInstallLabel('Launching installer...');
+                    setUpdateInstallPercent(100);
+                    setUpdateInstallEta(null);
+                    setUpdateInstallSpeed(null);
+                    setIsSlowNetworkHintVisible(false);
+                }
+
+                return;
+            }
+
+            if (stage === 'launched') {
+                setUpdateInstallLabel('Closing app...');
+                setUpdateInstallPercent(100);
+                setUpdateInstallEta(null);
+                setUpdateInstallSpeed(null);
+                setIsSlowNetworkHintVisible(false);
+            }
+
+            if (stage === 'failed') {
+                setIsLoading(false);
+                setIsUpdateInstalling(false);
+                setUpdateInstallLabel('Installing...');
+                setUpdateInstallPercent(null);
+                setUpdateInstallEta(null);
+                setUpdateInstallSpeed(null);
+                setIsSlowNetworkHintVisible(false);
+                updateSpeedTrackerRef.current = {lastAtMs: 0, lastBytes: 0, smoothedBps: 0, slowSinceMs: 0};
+            }
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, []);
+
+    useEffect(() => {
         if (!isModalOpen) {
             return;
         }
@@ -953,6 +1211,39 @@ function App() {
                         <div className="update-banner-copy">
                             <strong>New version {updateInfo.latestVersion} is available.</strong>
                             <span className="update-current">You&apos;re on {appVersion || updateInfo.currentVersion || 'unknown'}.</span>
+                            {isUpdateInstalling && (
+                                <div className="update-progress-wrap">
+                                    <div className="update-progress-row">
+                                        <span className="update-progress-label">{updateInstallLabel}</span>
+                                        {(updateInstallPercent !== null || updateInstallSpeed || updateInstallEta) && (
+                                            <span className="update-progress-meta">
+                                                {updateInstallPercent !== null ? `${updateInstallPercent}%` : ''}
+                                                {updateInstallSpeed ? (updateInstallPercent !== null ? ` | ${updateInstallSpeed}` : updateInstallSpeed) : ''}
+                                                {updateInstallEta
+                                                    ? ((updateInstallPercent !== null || updateInstallSpeed) ? ` | ${updateInstallEta}` : updateInstallEta)
+                                                    : ''}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div
+                                        className={`update-progress-track${updateInstallPercent === null ? ' is-indeterminate' : ''}`}
+                                        role="progressbar"
+                                        aria-label="Update installation progress"
+                                        aria-valuemin={0}
+                                        aria-valuemax={100}
+                                        aria-valuenow={updateInstallPercent ?? undefined}
+                                        aria-valuetext={updateInstallPercent !== null ? `${updateInstallPercent}%` : updateInstallLabel}
+                                    >
+                                        <span
+                                            className="update-progress-fill"
+                                            style={updateInstallPercent !== null ? {width: `${updateInstallPercent}%`} : undefined}
+                                        />
+                                    </div>
+                                    {isSlowNetworkHintVisible && (
+                                        <span className="update-progress-hint">Slow network detected. Download may take longer than usual.</span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                         <div className="update-banner-actions">
                             <button className="switch-btn secondary" onClick={() => setIsUpdateDismissed(true)} disabled={isLoading || isModalOpen}>
@@ -967,10 +1258,10 @@ function App() {
                             </button>
                             <button
                                 className="action-btn"
-                                onClick={() => void onOpenUpdateLink(updateInfo.downloadUrl || updateInfo.releaseUrl, 'update download')}
-                                disabled={isLoading || isModalOpen || !(updateInfo.downloadUrl || updateInfo.releaseUrl)}
+                                onClick={() => void onUpdatePrimaryAction()}
+                                disabled={isLoading || isUpdateInstalling || isModalOpen || !(updateInfo.downloadUrl || updateInfo.releaseUrl)}
                             >
-                                {updatePrimaryLabel}
+                                {isUpdateInstalling ? 'Installing...' : updatePrimaryLabel}
                             </button>
                         </div>
                     </div>
