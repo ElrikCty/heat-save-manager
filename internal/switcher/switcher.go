@@ -14,6 +14,7 @@ import (
 
 var (
 	ErrProfileNameRequired  = errors.New("profile name is required")
+	ErrProfileNameInvalid   = errors.New("profile name contains invalid characters")
 	ErrSaveGamePathRequired = errors.New("savegame path is required")
 	ErrProfilesPathRequired = errors.New("profiles path is required")
 )
@@ -56,9 +57,9 @@ func NewService(saveGamePath string, profilesPath string, marker MarkerWriter, o
 }
 
 func (s *Service) Switch(params Params) (Result, error) {
-	profileName := strings.TrimSpace(params.ProfileName)
-	if profileName == "" {
-		return Result{}, ErrProfileNameRequired
+	profileName, err := validateProfileName(params.ProfileName)
+	if err != nil {
+		return Result{}, err
 	}
 
 	if s.saveGamePath == "" {
@@ -82,7 +83,16 @@ func (s *Service) Switch(params Params) (Result, error) {
 		return Result{}, err
 	}
 
-	backupRoot := filepath.Join(s.saveGamePath, ".backup", s.now().UTC().Format("20060102-150405"))
+	backupParent := filepath.Join(s.saveGamePath, ".backup")
+	if err := os.MkdirAll(backupParent, 0o755); err != nil {
+		return Result{}, err
+	}
+
+	backupRoot, err := os.MkdirTemp(backupParent, "switch-*")
+	if err != nil {
+		return Result{}, err
+	}
+
 	backupSavegame := filepath.Join(backupRoot, savegameDirName)
 	backupWraps := filepath.Join(backupRoot, wrapsDirName)
 
@@ -135,6 +145,27 @@ func (s *Service) Switch(params Params) (Result, error) {
 		SwitchedAt:  s.now().UTC(),
 		RolledBack:  false,
 	}, nil
+}
+
+func validateProfileName(profileName string) (string, error) {
+	trimmed := strings.TrimSpace(profileName)
+	if trimmed == "" {
+		return "", ErrProfileNameRequired
+	}
+
+	if strings.ContainsAny(trimmed, `<>:"/\|?*`) {
+		return "", ErrProfileNameInvalid
+	}
+
+	if strings.HasSuffix(trimmed, ".") || strings.HasSuffix(trimmed, " ") {
+		return "", ErrProfileNameInvalid
+	}
+
+	if trimmed == "." || trimmed == ".." {
+		return "", ErrProfileNameInvalid
+	}
+
+	return trimmed, nil
 }
 
 func (s *Service) backupIfExists(source string, destination string) (bool, error) {

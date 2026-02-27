@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 const (
@@ -61,5 +63,15 @@ func (s *Store) Save(cfg AppConfig) error {
 		return err
 	}
 
-	return os.WriteFile(s.Path(), content, 0o644)
+	tmpPath := s.Path() + ".tmp-" + strings.ReplaceAll(time.Now().UTC().Format("20060102-150405.000000000"), ".", "")
+	if err := os.WriteFile(tmpPath, content, 0o644); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpPath, s.Path()); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+
+	return nil
 }

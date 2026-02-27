@@ -119,6 +119,29 @@ func TestSaveCurrentProfileWritesIntoNamedProfile(t *testing.T) {
 	assertFileContent(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps", "wrap.txt"), "new-wrap")
 }
 
+func TestSaveCurrentProfileKeepsExistingProfileWhenSecondReplaceFails(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+
+	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "new-save")
+	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "new-wrap")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame"), "slot.sav", "old-save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps"), "wrap.txt", "old-wrap")
+
+	failingOps := &failOnSecondReplaceLifecycleOps{base: fsops.NewLocal()}
+	svc := NewService(saveGamePath, profilesPath, marker.NewStore(saveGamePath), failingOps)
+	err := svc.SaveCurrentProfile("ProfileAlpha")
+	if err == nil {
+		t.Fatal("expected save current to fail")
+	}
+
+	assertFileContent(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame", "slot.sav"), "old-save")
+	assertFileContent(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps", "wrap.txt"), "old-wrap")
+}
+
 func TestSaveCurrentProfileUsesActiveMarkerNameWhenEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -194,6 +217,35 @@ func TestRenameProfileRenamesFolderAndActiveMarker(t *testing.T) {
 	}
 }
 
+func TestRenameProfileUpdatesMarkerCaseInsensitively(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame"), "slot.sav", "save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps"), "wrap.txt", "wrap")
+
+	store := marker.NewStore(saveGamePath)
+	if err := store.WriteActiveProfile("profilealpha"); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
+	if err := svc.RenameProfile("ProfileAlpha", "ProfileDelta"); err != nil {
+		t.Fatalf("rename profile: %v", err)
+	}
+
+	active, err := store.ReadActiveProfile()
+	if err != nil {
+		t.Fatalf("read active marker: %v", err)
+	}
+
+	if active != "ProfileDelta" {
+		t.Fatalf("expected active marker ProfileDelta, got %q", active)
+	}
+}
+
 func TestDeleteProfileBlocksActiveProfile(t *testing.T) {
 	t.Parallel()
 
@@ -205,6 +257,27 @@ func TestDeleteProfileBlocksActiveProfile(t *testing.T) {
 
 	store := marker.NewStore(saveGamePath)
 	if err := store.WriteActiveProfile("ProfileAlpha"); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
+	err := svc.DeleteProfile("ProfileAlpha")
+	if !errors.Is(err, ErrCannotDeleteActiveProfile) {
+		t.Fatalf("expected ErrCannotDeleteActiveProfile, got %v", err)
+	}
+}
+
+func TestDeleteProfileBlocksActiveProfileCaseInsensitively(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame"), "slot.sav", "save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps"), "wrap.txt", "wrap")
+
+	store := marker.NewStore(saveGamePath)
+	if err := store.WriteActiveProfile("profilealpha"); err != nil {
 		t.Fatalf("write marker: %v", err)
 	}
 
@@ -340,4 +413,26 @@ func (f failingRenameMarker) ReadActiveProfile() (string, error) {
 func (f failingRenameMarker) WriteActiveProfile(profileName string) error {
 	_ = profileName
 	return errors.New("marker write failure")
+}
+
+type failOnSecondReplaceLifecycleOps struct {
+	base         *fsops.Local
+	replaceCalls int
+}
+
+func (f *failOnSecondReplaceLifecycleOps) CopyDir(source string, destination string) error {
+	return f.base.CopyDir(source, destination)
+}
+
+func (f *failOnSecondReplaceLifecycleOps) ReplaceDir(source string, destination string) error {
+	f.replaceCalls++
+	if f.replaceCalls == 2 {
+		return errors.New("forced second replace failure")
+	}
+
+	return f.base.ReplaceDir(source, destination)
+}
+
+func (f *failOnSecondReplaceLifecycleOps) RemoveDir(path string) error {
+	return f.base.RemoveDir(path)
 }

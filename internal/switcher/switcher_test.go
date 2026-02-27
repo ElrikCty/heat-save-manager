@@ -206,6 +206,11 @@ func TestSwitchRequiresValidInputs(t *testing.T) {
 	if !errors.Is(err, ErrProfileNameRequired) {
 		t.Fatalf("expected ErrProfileNameRequired, got %v", err)
 	}
+
+	_, err = service.Switch(Params{ProfileName: "..\\outside"})
+	if !errors.Is(err, ErrProfileNameInvalid) {
+		t.Fatalf("expected ErrProfileNameInvalid, got %v", err)
+	}
 }
 
 type failingMarker struct{}

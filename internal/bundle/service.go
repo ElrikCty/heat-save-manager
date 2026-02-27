@@ -18,6 +18,13 @@ var (
 	ErrProfileNameRequired  = errors.New("profile name is required")
 	ErrBundlePathRequired   = errors.New("bundle path is required")
 	ErrInvalidProfileName   = errors.New("profile name contains invalid characters")
+	ErrBundleTooLarge       = errors.New("bundle exceeds import safety limits")
+)
+
+var (
+	maxBundleEntries          = 10_000
+	maxBundleFileBytes  int64 = 256 << 20
+	maxBundleTotalBytes int64 = 2 << 30
 )
 
 type Service struct {
@@ -96,10 +103,14 @@ func (s *Service) ExportProfile(profileName string, bundlePath string) error {
 		if err != nil {
 			return err
 		}
-		defer in.Close()
 
-		_, err = io.Copy(writer, in)
-		return err
+		_, copyErr := io.Copy(writer, in)
+		closeErr := in.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+
+		return closeErr
 	})
 }
 
@@ -146,8 +157,13 @@ func (s *Service) ImportProfile(profileName string, bundlePath string) error {
 }
 
 func extractBundleToProfileRoot(files []*zip.File, profileRoot string) error {
+	if len(files) > maxBundleEntries {
+		return ErrBundleTooLarge
+	}
+
 	root := filepath.Clean(profileRoot)
 	rootPrefix := root + string(os.PathSeparator)
+	var totalUncompressedBytes int64
 
 	for _, f := range files {
 		targetPath := filepath.Join(profileRoot, filepath.FromSlash(f.Name))
@@ -178,10 +194,25 @@ func extractBundleToProfileRoot(files []*zip.File, profileRoot string) error {
 			return err
 		}
 
-		if _, err := io.Copy(out, in); err != nil {
+		limited := &io.LimitedReader{R: in, N: maxBundleFileBytes + 1}
+		written, copyErr := io.Copy(out, limited)
+		if copyErr != nil {
 			in.Close()
 			out.Close()
-			return err
+			return copyErr
+		}
+
+		if written > maxBundleFileBytes {
+			in.Close()
+			out.Close()
+			return ErrBundleTooLarge
+		}
+
+		totalUncompressedBytes += written
+		if totalUncompressedBytes > maxBundleTotalBytes {
+			in.Close()
+			out.Close()
+			return ErrBundleTooLarge
 		}
 
 		if err := in.Close(); err != nil {

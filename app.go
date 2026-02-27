@@ -331,12 +331,22 @@ func (a *App) CreateMarkerFile(profileName string) error {
 		return err
 	}
 
-	trimmed := strings.TrimSpace(profileName)
-	if trimmed == "" {
-		return marker.ErrProfileNameRequired
+	trimmed, err := validateProfileNameInput(profileName)
+	if err != nil {
+		return err
 	}
 
-	profilePath := filepath.Join(a.profilesPath, trimmed)
+	cleanProfilesPath := filepath.Clean(a.profilesPath)
+	profilePath := filepath.Join(cleanProfilesPath, trimmed)
+	relPath, err := filepath.Rel(cleanProfilesPath, profilePath)
+	if err != nil {
+		return errors.New("profile name is invalid")
+	}
+
+	if relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
+		return errors.New("profile name is invalid")
+	}
+
 	info, err := os.Stat(profilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -361,6 +371,27 @@ func (a *App) CreateMarkerFile(profileName string) error {
 	}
 
 	return nil
+}
+
+func validateProfileNameInput(profileName string) (string, error) {
+	trimmed := strings.TrimSpace(profileName)
+	if trimmed == "" {
+		return "", marker.ErrProfileNameRequired
+	}
+
+	if strings.ContainsAny(trimmed, `<>:"/\|?*`) {
+		return "", errors.New("profile name contains invalid characters")
+	}
+
+	if strings.HasSuffix(trimmed, ".") || strings.HasSuffix(trimmed, " ") {
+		return "", errors.New("profile name contains invalid characters")
+	}
+
+	if trimmed == "." || trimmed == ".." {
+		return "", errors.New("profile name contains invalid characters")
+	}
+
+	return trimmed, nil
 }
 
 func (a *App) ExportProfileBundle(profileName string, bundlePath string) error {

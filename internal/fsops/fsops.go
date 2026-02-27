@@ -79,8 +79,13 @@ func (l *Local) ReplaceDir(source string, destination string) error {
 		return err
 	}
 
-	tmpDir := destination + ".replace-" + strings.ReplaceAll(time.Now().UTC().Format("20060102-150405.000000000"), ".", "")
+	timestampToken := strings.ReplaceAll(time.Now().UTC().Format("20060102-150405.000000000"), ".", "")
+	tmpDir := destination + ".replace-" + timestampToken
+	backupDir := destination + ".backup-" + timestampToken
 	if err := os.RemoveAll(tmpDir); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(backupDir); err != nil {
 		return err
 	}
 
@@ -88,14 +93,34 @@ func (l *Local) ReplaceDir(source string, destination string) error {
 		return err
 	}
 
-	if err := os.RemoveAll(destination); err != nil {
+	hadDestination := false
+	if _, err := os.Stat(destination); err == nil {
+		hadDestination = true
+		if err := os.Rename(destination, backupDir); err != nil {
+			_ = os.RemoveAll(tmpDir)
+			return err
+		}
+	} else if !os.IsNotExist(err) {
 		_ = os.RemoveAll(tmpDir)
 		return err
 	}
 
 	if err := os.Rename(tmpDir, destination); err != nil {
+		if hadDestination {
+			if rollbackErr := os.Rename(backupDir, destination); rollbackErr != nil {
+				_ = os.RemoveAll(tmpDir)
+				return fmt.Errorf("replace dir failed: %w; rollback failed: %v", err, rollbackErr)
+			}
+		}
+
 		_ = os.RemoveAll(tmpDir)
 		return err
+	}
+
+	if hadDestination {
+		if err := os.RemoveAll(backupDir); err != nil {
+			return err
+		}
 	}
 
 	return nil
