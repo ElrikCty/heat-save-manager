@@ -455,6 +455,11 @@ func (a *App) applySaveGamePath(saveGamePath string) error {
 		return errors.New("path must point to the SaveGame folder")
 	}
 
+	parentDirName := filepath.Base(filepath.Dir(trimmed))
+	if !strings.EqualFold(parentDirName, "Need for speed heat") {
+		return errors.New("savegame path must be inside the Need for Speed Heat folder")
+	}
+
 	profilesPath := filepath.Join(trimmed, "Profiles")
 	if err := os.MkdirAll(profilesPath, 0o755); err != nil {
 		return fmt.Errorf("ensure Profiles folder: %w", err)

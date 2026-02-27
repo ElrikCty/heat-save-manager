@@ -306,7 +306,7 @@ function App() {
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
     const needsProfilesFolderFix = healthReport?.items.some((item) => item.name === 'profiles_path' && !item.ok) ?? false;
     const needsMarkerFileFix = markerHealthItem?.message.toLowerCase().includes('is missing') ?? false;
-    const hasQuickActions = !needsSaveGamePathFix && (needsProfilesFolderFix || needsMarkerFileFix);
+    const hasQuickActions = needsSaveGamePathFix || needsProfilesFolderFix || needsMarkerFileFix;
     const hasDiagnosticErrors = healthReport?.items.some((item) => item.severity === 'error') ?? false;
     const hasDiagnosticWarnings = healthReport?.items.some((item) => item.severity === 'warn') ?? false;
     const diagnosticsStatusLabel = isLoading
@@ -593,8 +593,8 @@ function App() {
         }
 
         const normalized = trimmed.replace(/[\\/]+$/, '');
-        if (!/[\\/]SaveGame$/i.test(normalized)) {
-            setStatus('Path must point directly to the SaveGame folder.');
+        if (!/[\\/]Need for speed heat[\\/]SaveGame$/i.test(normalized)) {
+            setStatus('Path must point to Need for speed heat\\SaveGame.');
             return;
         }
 
@@ -1295,10 +1295,15 @@ function App() {
                             {isLoading ? 'Running...' : (<><Zap size={13} strokeWidth={2.15} /> Run Diagnostics</>)}
                         </span>
                     </button>
-                    {!needsSaveGamePathFix && (needsProfilesFolderFix || needsMarkerFileFix) && (
+                    {(needsSaveGamePathFix || needsProfilesFolderFix || needsMarkerFileFix) && (
                         <div className="diag-actions">
                             <h3>Quick Actions</h3>
                             <p className="diag-callout">Action required: use a quick action below to continue setup.</p>
+                            {needsSaveGamePathFix && (
+                                <button className="action-btn secondary attention" onClick={() => setIsSavePathSetupOpen(true)} disabled={isLoading || isModalOpen}>
+                                    Set SaveGame path
+                                </button>
+                            )}
                             {needsProfilesFolderFix && (
                                 <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('profiles')} disabled={isLoading || isModalOpen}>
                                     Create Profiles folder
@@ -1585,8 +1590,15 @@ function App() {
                             disabled={isLoading}
                             autoFocus
                         />
-                        <p className="field-hint">Path must point directly to the <span className="path-token">SaveGame</span> folder.</p>
+                        <p className="field-hint">Path must point to <span className="path-token">Need for speed heat\SaveGame</span>.</p>
                         <div className="modal-actions">
+                            <button
+                                className="switch-btn secondary"
+                                onClick={() => setIsSavePathSetupOpen(false)}
+                                disabled={isLoading}
+                            >
+                                Close for now
+                            </button>
                             <button
                                 className="switch-btn secondary"
                                 onClick={() => setSaveGamePathInput(saveGamePath)}
