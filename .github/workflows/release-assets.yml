@@ -108,7 +108,29 @@ jobs:
           $zipAssetPath = "build/bin/$zipAssetName"
           $exeAssetName = "HeatSaveManager-$env:TAG_NAME-windows-x64.exe"
           $exeAssetPath = "build/bin/$exeAssetName"
-          $installerSourcePath = "build/bin/HeatSaveManager-amd64-installer.exe"
+          $installerSourcePath = $null
+          $preferredInstallerOutputs = @(
+            "build/bin/HeatSaveManager-amd64-installer.exe",
+            "build/bin/Heat Save Manager-amd64-installer.exe"
+          )
+
+          foreach ($candidate in $preferredInstallerOutputs) {
+            if (Test-Path $candidate) {
+              $installerSourcePath = $candidate
+              break
+            }
+          }
+
+          if (-not $installerSourcePath) {
+            $discoveredInstaller = Get-ChildItem "build/bin" -Filter "*-amd64-installer.exe" -File |
+              Sort-Object LastWriteTimeUtc -Descending |
+              Select-Object -First 1
+
+            if ($discoveredInstaller) {
+              $installerSourcePath = $discoveredInstaller.FullName
+            }
+          }
+
           $installerAssetName = "HeatSaveManager-$env:TAG_NAME-windows-x64-installer.exe"
           $installerAssetPath = "build/bin/$installerAssetName"
 
