@@ -20,6 +20,7 @@ import {
     RenameProfile,
     SaveCurrentProfile,
     SetSaveGamePath,
+    StartInAppUpdate,
     SwitchProfile,
     RunHealthCheck,
 } from '../wailsjs/go/main/App';
@@ -233,24 +234,6 @@ function formatRate(bytesPerSecond: number): string {
     }
 
     return `${formatBytes(bytesPerSecond)}/s`;
-}
-
-function startInAppUpdate(downloadUrl: string, releaseUrl: string): Promise<UpdateInstallResult> {
-    const appBindings = (window as unknown as {
-        go?: {
-            main?: {
-                App?: {
-                    StartInAppUpdate?: (downloadURL: string, releaseURL: string) => Promise<UpdateInstallResult>;
-                };
-            };
-        };
-    }).go?.main?.App;
-
-    if (!appBindings?.StartInAppUpdate) {
-        return Promise.reject(new Error('In-app updater is unavailable in this build.'));
-    }
-
-    return appBindings.StartInAppUpdate(downloadUrl, releaseUrl);
 }
 
 const updateProgressEventName = 'updater:progress';
@@ -524,7 +507,7 @@ function App() {
             setStatus('Downloading installer update...');
             setRecoveryHint('');
 
-            const result = await startInAppUpdate(downloadUrl, releaseUrl);
+            const result = await StartInAppUpdate(downloadUrl, releaseUrl) as UpdateInstallResult;
             const message = result.message?.trim() || 'Installer launched. Closing app to finish update...';
 
             setStatus(message);
@@ -1023,7 +1006,7 @@ function App() {
                 ? Math.max(0, Math.min(100, Math.round(rawPercent)))
                 : null;
 
-            if (message) {
+            if (message && stage !== 'downloading') {
                 setStatus(message);
             }
 
