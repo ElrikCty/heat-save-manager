@@ -24,12 +24,14 @@ import (
 	"heat-save-manager/internal/marker"
 	"heat-save-manager/internal/profiles"
 	"heat-save-manager/internal/switcher"
+	"heat-save-manager/internal/updater"
 )
 
 const (
-	githubLatestURL    = "https://api.github.com/repos/ElrikCty/heat-save-manager/releases/latest"
-	defaultUserAgent   = "heat-save-manager-update-check"
-	defaultHTTPTimeout = 8 * time.Second
+	githubLatestURL     = "https://api.github.com/repos/ElrikCty/heat-save-manager/releases/latest"
+	defaultUserAgent    = "heat-save-manager-update-check"
+	defaultHTTPTimeout  = 8 * time.Second
+	updateProgressEvent = "updater:progress"
 )
 
 var appVersion = "dev"
@@ -77,6 +79,12 @@ type UpdateInfo struct {
 	DownloadURL     string `json:"downloadUrl"`
 	PublishedAt     string `json:"publishedAt"`
 	Notes           string `json:"notes"`
+}
+
+type UpdateInstallResult struct {
+	Started     bool   `json:"started"`
+	Message     string `json:"message"`
+	FallbackURL string `json:"fallbackUrl"`
 }
 
 func (a *App) initDefaultPaths() {
@@ -202,6 +210,50 @@ func (a *App) OpenExternalURL(rawURL string) error {
 
 	runtime.BrowserOpenURL(a.ctx, trimmed)
 	return nil
+}
+
+func (a *App) StartInAppUpdate(downloadURL string, releaseURL string) (UpdateInstallResult, error) {
+	ctx := context.Background()
+	if a.ctx != nil {
+		ctx = a.ctx
+	}
+
+	svc := updater.NewService("", nil)
+	svc.SetProgressCallback(func(progress updater.Progress) {
+		if a.ctx == nil {
+			return
+		}
+
+		payload := map[string]interface{}{
+			"stage":   progress.Stage,
+			"message": progress.Message,
+		}
+
+		if progress.DownloadedBytes > 0 {
+			payload["downloadedBytes"] = progress.DownloadedBytes
+		}
+
+		if progress.TotalBytes > 0 {
+			payload["totalBytes"] = progress.TotalBytes
+		}
+
+		if progress.Percent >= 0 {
+			payload["percent"] = progress.Percent
+		}
+
+		runtime.EventsEmit(a.ctx, updateProgressEvent, payload)
+	})
+
+	result, err := svc.Start(ctx, downloadURL, releaseURL)
+	if err != nil {
+		return UpdateInstallResult{}, err
+	}
+
+	return UpdateInstallResult{
+		Started:     result.Started,
+		Message:     result.Message,
+		FallbackURL: result.FallbackURL,
+	}, nil
 }
 
 func (a *App) GetPaths() AppPaths {
