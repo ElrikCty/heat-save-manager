@@ -1226,6 +1226,14 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     color: rgba(188, 203, 223, 0.65);
 }
 
+.save-path-setup-card {
+    width: min(560px, 100%);
+}
+
+.save-path-setup-card .field-hint {
+    margin: 0.52rem 0 0;
+}
+
 .modal-actions { margin-top: 0.84rem; display: flex; gap: 0.5rem; justify-content: flex-end; }
 
 .export-modal-card .field-label {

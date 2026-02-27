@@ -281,6 +281,7 @@ function App() {
     const [updateInstallEta, setUpdateInstallEta] = useState<string | null>(null);
     const [updateInstallSpeed, setUpdateInstallSpeed] = useState<string | null>(null);
     const [isSlowNetworkHintVisible, setIsSlowNetworkHintVisible] = useState(false);
+    const [isSavePathSetupOpen, setIsSavePathSetupOpen] = useState(false);
     const saveActionsRef = useRef<HTMLDivElement | null>(null);
     const importNewProfileRef = useRef<HTMLInputElement | null>(null);
     const toastTimerRef = useRef<number | null>(null);
@@ -293,17 +294,19 @@ function App() {
         slowSinceMs: 0,
     });
 
-    const isModalOpen = renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen || isFreshConfirmOpen;
+    const isModalOpen = isSavePathSetupOpen || renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen || isFreshConfirmOpen;
 
     const canApplyPath = saveGamePathInput.trim() !== '';
     const canPrepareFresh = freshProfileName.trim() !== '';
     const canExportBundle = exportProfileName.trim() !== '';
     const resolvedImportTarget = importTargetProfile === NEW_PROFILE_OPTION ? importTargetNewName.trim() : importTargetProfile.trim();
     const canImportBundle = resolvedImportTarget !== '' && importBundlePath.trim() !== '';
+    const saveGamePathHealthItem = healthReport?.items.find((item) => item.name === 'savegame_path') ?? null;
+    const needsSaveGamePathFix = saveGamePathHealthItem ? !saveGamePathHealthItem.ok : false;
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
     const needsProfilesFolderFix = healthReport?.items.some((item) => item.name === 'profiles_path' && !item.ok) ?? false;
     const needsMarkerFileFix = markerHealthItem?.message.toLowerCase().includes('is missing') ?? false;
-    const hasQuickActions = needsProfilesFolderFix || needsMarkerFileFix;
+    const hasQuickActions = !needsSaveGamePathFix && (needsProfilesFolderFix || needsMarkerFileFix);
     const hasDiagnosticErrors = healthReport?.items.some((item) => item.severity === 'error') ?? false;
     const hasDiagnosticWarnings = healthReport?.items.some((item) => item.severity === 'warn') ?? false;
     const diagnosticsStatusLabel = isLoading
@@ -370,6 +373,9 @@ function App() {
             });
             setHealthReport(health);
 
+            const requiresSavePathSetup = health.items.some((item) => item.name === 'savegame_path' && !item.ok);
+            setIsSavePathSetupOpen(requiresSavePathSetup);
+
             let resolvedActive = '';
             try {
                 const active = await GetActiveProfile();
@@ -431,8 +437,13 @@ function App() {
                 return profileItems[0]?.name ?? NEW_PROFILE_OPTION;
             });
 
-            setStatus('Ready');
-            setRecoveryHint('');
+            if (requiresSavePathSetup) {
+                setStatus('SaveGame path setup is required.');
+                setRecoveryHint('Confirm your SaveGame path in the startup dialog to continue setup.');
+            } else {
+                setStatus('Ready');
+                setRecoveryHint('');
+            }
             if (withRefreshToast) {
                 showToast('Data refreshed.');
             }
@@ -1284,7 +1295,7 @@ function App() {
                             {isLoading ? 'Running...' : (<><Zap size={13} strokeWidth={2.15} /> Run Diagnostics</>)}
                         </span>
                     </button>
-                    {(needsProfilesFolderFix || needsMarkerFileFix) && (
+                    {!needsSaveGamePathFix && (needsProfilesFolderFix || needsMarkerFileFix) && (
                         <div className="diag-actions">
                             <h3>Quick Actions</h3>
                             <p className="diag-callout">Action required: use a quick action below to continue setup.</p>
@@ -1554,6 +1565,40 @@ function App() {
             {toastMessage && (
                 <div className={`toast ${toastKind === 'info' ? 'toast-info' : toastKind === 'error' ? 'toast-error' : 'toast-success'}`} role="status" aria-live="polite">
                     {toastKind === 'error' ? <AlertTriangle size={15} strokeWidth={2.2} /> : <CheckCircle2 size={15} strokeWidth={2.2} />} {toastMessage}
+                </div>
+            )}
+
+            {isSavePathSetupOpen && (
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="save-path-setup-title" aria-describedby="save-path-setup-description">
+                    <div className="modal-card save-path-setup-card" onClick={(event) => event.stopPropagation()}>
+                        <h3 id="save-path-setup-title">Set SaveGame Path</h3>
+                        <p id="save-path-setup-description">
+                            Before continuing, confirm your Need for Speed Heat <span className="path-token">SaveGame</span> folder.
+                        </p>
+                        <p className="modal-note">Detected path: <strong>{saveGamePath ? maskWindowsUserPath(saveGamePath) : 'Not detected'}</strong></p>
+                        <label className="field-label" htmlFor="startup-savegame-path-input">SaveGame path</label>
+                        <input
+                            id="startup-savegame-path-input"
+                            value={saveGamePathInput}
+                            onChange={(event) => setSaveGamePathInput(event.target.value)}
+                            placeholder="C:\\Users\\<user>\\Documents\\Need for speed heat\\SaveGame"
+                            disabled={isLoading}
+                            autoFocus
+                        />
+                        <p className="field-hint">Path must point directly to the <span className="path-token">SaveGame</span> folder.</p>
+                        <div className="modal-actions">
+                            <button
+                                className="switch-btn secondary"
+                                onClick={() => setSaveGamePathInput(saveGamePath)}
+                                disabled={isLoading || !saveGamePath}
+                            >
+                                Use detected path
+                            </button>
+                            <button className="action-btn" onClick={() => void onApplyPath()} disabled={isLoading || !canApplyPath}>
+                                {isLoading ? 'Applying...' : 'Confirm path'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
