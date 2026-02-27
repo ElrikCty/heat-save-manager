@@ -47,6 +47,11 @@
     z-index: 42;
 }
 
+.app-shell.quick-actions-focus .update-banner {
+    position: relative;
+    z-index: 39;
+}
+
 .app-shell.quick-actions-focus .diag-actions h3,
 .app-shell.quick-actions-focus .diag-actions .diag-callout {
     opacity: 0.6;
