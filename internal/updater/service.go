@@ -90,7 +90,7 @@ func (s *Service) Start(ctx context.Context, downloadURL string, releaseURL stri
 	}
 
 	s.emitProgress("downloaded", "Installer downloaded. Launching installer...")
-	s.emitProgress("launching", "Launching installer...")
+	s.emitProgress("launching", "Launching installer... approve the Windows prompt if asked.")
 
 	if err := s.launcher.Start(installerPath); err != nil {
 		s.emitProgress("failed", "Failed to launch installer.")
@@ -151,11 +151,17 @@ func (s *Service) downloadInstaller(ctx context.Context, installerURL string) (s
 		return "", fmt.Errorf("prepare updater temp directory: %w", err)
 	}
 
+	installerTempDir, err := os.MkdirTemp(s.tempRoot, "installer-")
+	if err != nil {
+		return "", fmt.Errorf("prepare installer temp directory: %w", err)
+	}
+
 	fileName := resolvedInstallerFileName(resp.Request.URL)
-	targetPath := filepath.Join(s.tempRoot, fmt.Sprintf("%d-%s", s.now().UTC().UnixNano(), fileName))
+	targetPath := filepath.Join(installerTempDir, fileName)
 
 	file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o700)
 	if err != nil {
+		_ = os.Remove(installerTempDir)
 		return "", fmt.Errorf("create installer file: %w", err)
 	}
 
@@ -170,13 +176,13 @@ func (s *Service) downloadInstaller(ctx context.Context, installerURL string) (s
 			writeBytes, writeErr := file.Write(buffer[:readBytes])
 			if writeErr != nil {
 				_ = file.Close()
-				_ = os.Remove(targetPath)
+				removeInstallerArtifacts(targetPath)
 				return "", fmt.Errorf("write installer file: %w", writeErr)
 			}
 
 			if writeBytes != readBytes {
 				_ = file.Close()
-				_ = os.Remove(targetPath)
+				removeInstallerArtifacts(targetPath)
 				return "", io.ErrShortWrite
 			}
 
@@ -194,7 +200,7 @@ func (s *Service) downloadInstaller(ctx context.Context, installerURL string) (s
 
 		if readErr != nil {
 			_ = file.Close()
-			_ = os.Remove(targetPath)
+			removeInstallerArtifacts(targetPath)
 			return "", fmt.Errorf("write installer file: %w", readErr)
 		}
 	}
@@ -203,21 +209,30 @@ func (s *Service) downloadInstaller(ctx context.Context, installerURL string) (s
 
 	if syncErr := file.Sync(); syncErr != nil {
 		_ = file.Close()
-		_ = os.Remove(targetPath)
+		removeInstallerArtifacts(targetPath)
 		return "", fmt.Errorf("sync installer file: %w", syncErr)
 	}
 
 	if closeErr := file.Close(); closeErr != nil {
-		_ = os.Remove(targetPath)
+		removeInstallerArtifacts(targetPath)
 		return "", fmt.Errorf("close installer file: %w", closeErr)
 	}
 
 	if written > s.maxDownloadBytes {
-		_ = os.Remove(targetPath)
+		removeInstallerArtifacts(targetPath)
 		return "", fmt.Errorf("installer download exceeds %d MB limit", s.maxDownloadBytes/(1024*1024))
 	}
 
 	return targetPath, nil
+}
+
+func removeInstallerArtifacts(path string) {
+	if strings.TrimSpace(path) == "" {
+		return
+	}
+
+	_ = os.Remove(path)
+	_ = os.Remove(filepath.Dir(path))
 }
 
 func (s *Service) emitDownloadProgress(downloadedBytes int64, totalBytes int64) {
@@ -325,9 +340,7 @@ type execLauncher struct{}
 
 func (e execLauncher) Start(installerPath string) error {
 	if runtime.GOOS == "windows" {
-		cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", "Start-Process -FilePath $env:HSM_INSTALLER_PATH -ArgumentList '/S','/AUTORESTARTAPP' -Verb RunAs")
-		cmd.Env = append(os.Environ(), "HSM_INSTALLER_PATH="+installerPath)
-		return cmd.Run()
+		return startInstallerElevated(installerPath)
 	}
 
 	cmd := exec.Command(installerPath)

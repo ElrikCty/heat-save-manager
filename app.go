@@ -77,8 +77,17 @@ type UpdateInfo struct {
 	UpdateAvailable bool   `json:"updateAvailable"`
 	ReleaseURL      string `json:"releaseUrl"`
 	DownloadURL     string `json:"downloadUrl"`
+	DownloadAsset   string `json:"downloadAsset"`
+	DownloadKind    string `json:"downloadKind"`
+	InAppEligible   bool   `json:"inAppEligible"`
+	InAppReason     string `json:"inAppReason"`
 	PublishedAt     string `json:"publishedAt"`
 	Notes           string `json:"notes"`
+}
+
+type releaseAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
 type UpdateInstallResult struct {
@@ -148,14 +157,11 @@ func (a *App) CheckForUpdates() (UpdateInfo, error) {
 	}
 
 	var payload struct {
-		TagName     string `json:"tag_name"`
-		HTMLURL     string `json:"html_url"`
-		PublishedAt string `json:"published_at"`
-		Body        string `json:"body"`
-		Assets      []struct {
-			Name               string `json:"name"`
-			BrowserDownloadURL string `json:"browser_download_url"`
-		} `json:"assets"`
+		TagName     string         `json:"tag_name"`
+		HTMLURL     string         `json:"html_url"`
+		PublishedAt string         `json:"published_at"`
+		Body        string         `json:"body"`
+		Assets      []releaseAsset `json:"assets"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -172,7 +178,12 @@ func (a *App) CheckForUpdates() (UpdateInfo, error) {
 	info.PublishedAt = strings.TrimSpace(payload.PublishedAt)
 	info.Notes = strings.TrimSpace(payload.Body)
 
-	info.DownloadURL = selectPreferredWindowsDownloadURL(payload.Assets)
+	selectedAsset := selectPreferredWindowsAsset(payload.Assets)
+	info.DownloadURL = selectedAsset.URL
+	info.DownloadAsset = selectedAsset.Name
+	info.DownloadKind = selectedAsset.Kind
+	info.InAppEligible = selectedAsset.Kind == "installer" && strings.TrimSpace(selectedAsset.URL) != ""
+	info.InAppReason = selectedAsset.InAppReason
 
 	if strings.EqualFold(strings.TrimSpace(info.CurrentVersion), "dev") {
 		info.UpdateAvailable = false
@@ -585,44 +596,121 @@ func parseVersionNumber(piece string) (int, bool) {
 	return value, true
 }
 
-func selectPreferredWindowsDownloadURL(assets []struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-}) string {
+type windowsAssetSelection struct {
+	Name        string
+	URL         string
+	Kind        string
+	InAppReason string
+}
+
+type windowsAssetCandidate struct {
+	name      string
+	url       string
+	kind      string
+	isX64     bool
+	isWindows bool
+}
+
+func selectPreferredWindowsAsset(assets []releaseAsset) windowsAssetSelection {
 	if len(assets) == 0 {
-		return ""
+		return windowsAssetSelection{InAppReason: "In-app update is unavailable: no compatible Windows update asset was found in this release."}
 	}
 
-	type candidate struct {
-		suffix string
-		url    string
-	}
-
-	choices := []candidate{}
+	candidates := make([]windowsAssetCandidate, 0, len(assets))
 	for _, asset := range assets {
-		name := strings.ToLower(strings.TrimSpace(asset.Name))
-		url := strings.TrimSpace(asset.BrowserDownloadURL)
-		if name == "" || url == "" {
+		name := strings.TrimSpace(asset.Name)
+		if name == "" {
 			continue
 		}
 
+		url := strings.TrimSpace(asset.BrowserDownloadURL)
+		if url == "" {
+			continue
+		}
+
+		lowerName := strings.ToLower(name)
+		if strings.HasSuffix(lowerName, ".sha256") {
+			continue
+		}
+
+		if strings.Contains(lowerName, "linux") || strings.Contains(lowerName, "darwin") || strings.Contains(lowerName, "macos") {
+			continue
+		}
+
+		if strings.Contains(lowerName, "arm64") || strings.Contains(lowerName, "aarch64") {
+			continue
+		}
+
+		kind := ""
 		switch {
-		case strings.HasSuffix(name, "windows-x64-installer.exe"):
-			choices = append(choices, candidate{suffix: "installer", url: url})
-		case strings.HasSuffix(name, "windows-x64.exe"):
-			choices = append(choices, candidate{suffix: "exe", url: url})
-		case strings.HasSuffix(name, "windows-x64.zip"):
-			choices = append(choices, candidate{suffix: "zip", url: url})
+		case strings.HasSuffix(lowerName, ".exe") && strings.Contains(lowerName, "installer"):
+			kind = "installer"
+		case strings.HasSuffix(lowerName, ".exe"):
+			kind = "exe"
+		case strings.HasSuffix(lowerName, ".zip"):
+			kind = "zip"
+		default:
+			continue
+		}
+
+		candidate := windowsAssetCandidate{
+			name:      name,
+			url:       url,
+			kind:      kind,
+			isX64:     strings.Contains(lowerName, "x64") || strings.Contains(lowerName, "amd64") || strings.Contains(lowerName, "x86_64"),
+			isWindows: strings.Contains(lowerName, "windows") || strings.HasSuffix(lowerName, ".exe"),
+		}
+
+		candidates = append(candidates, candidate)
+	}
+
+	for _, preferredKind := range []string{"installer", "exe", "zip"} {
+		if selected, ok := pickCandidate(candidates, preferredKind, true, true); ok {
+			return selected
+		}
+
+		if selected, ok := pickCandidate(candidates, preferredKind, true, false); ok {
+			return selected
+		}
+
+		if selected, ok := pickCandidate(candidates, preferredKind, false, true); ok {
+			return selected
+		}
+
+		if selected, ok := pickCandidate(candidates, preferredKind, false, false); ok {
+			return selected
 		}
 	}
 
-	for _, preferred := range []string{"installer", "exe", "zip"} {
-		for _, c := range choices {
-			if c.suffix == preferred {
-				return c.url
-			}
+	return windowsAssetSelection{InAppReason: "In-app update is unavailable: no compatible Windows update asset was found in this release."}
+}
+
+func pickCandidate(candidates []windowsAssetCandidate, kind string, requireX64 bool, requireWindows bool) (windowsAssetSelection, bool) {
+	for _, candidate := range candidates {
+		if candidate.kind != kind {
+			continue
 		}
+
+		if requireX64 && !candidate.isX64 {
+			continue
+		}
+
+		if requireWindows && !candidate.isWindows {
+			continue
+		}
+
+		selection := windowsAssetSelection{
+			Name: candidate.name,
+			URL:  candidate.url,
+			Kind: candidate.kind,
+		}
+
+		if candidate.kind != "installer" {
+			selection.InAppReason = "In-app update is unavailable: this release does not include a Windows installer asset."
+		}
+
+		return selection, true
 	}
 
-	return ""
+	return windowsAssetSelection{}, false
 }

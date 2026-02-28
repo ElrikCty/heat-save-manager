@@ -49,6 +49,10 @@ type UpdateInfo = {
     updateAvailable: boolean;
     releaseUrl: string;
     downloadUrl: string;
+    downloadAsset: string;
+    downloadKind: string;
+    inAppEligible: boolean;
+    inAppReason: string;
     publishedAt: string;
     notes: string;
 };
@@ -155,6 +159,13 @@ function toErrorFeedback(error: unknown, fallback: string): ErrorFeedback {
         return {
             message: 'Installer requires administrator approval.',
             hint: 'Approve the Windows UAC prompt to continue in-app update install.',
+        };
+    }
+
+    if (lowered.includes('direct update requires a windows installer asset') || lowered.includes('update download url is required')) {
+        return {
+            message: 'In-app update is unavailable for this release.',
+            hint: 'Use View notes to open the release page and install manually.',
         };
     }
 
@@ -356,9 +367,8 @@ function App() {
     const selectedCustomDestination = saveDestinationProfile === NEW_PROFILE_OPTION ? saveDestinationNewName.trim() : saveDestinationProfile.trim();
     const resolvedSaveDestination = saveDestinationMode === 'active' ? activeProfile.trim() : selectedCustomDestination;
     const canSaveCurrent = resolvedSaveDestination !== '';
-    const updateDownloadURL = (updateInfo?.downloadUrl || '').trim();
-    const isInstallerUpdate = updateDownloadURL.toLowerCase().endsWith('-installer.exe');
-    const updatePrimaryLabel = isInstallerUpdate ? 'Install update' : 'Update now';
+    const isInAppUpdateEligible = updateInfo?.inAppEligible ?? false;
+    const updatePrimaryLabel = isInAppUpdateEligible ? 'Install update' : 'Update now';
 
     function showToast(message: string, kind: ToastKind = 'success') {
         setToastKind(kind);
@@ -493,7 +503,21 @@ function App() {
         }
 
         try {
-            const info = await CheckForUpdates();
+            const rawInfo = await CheckForUpdates() as Partial<UpdateInfo>;
+            const info: UpdateInfo = {
+                currentVersion: rawInfo.currentVersion || resolvedVersion || '',
+                latestVersion: rawInfo.latestVersion || resolvedVersion || '',
+                updateAvailable: Boolean(rawInfo.updateAvailable),
+                releaseUrl: (rawInfo.releaseUrl || '').trim(),
+                downloadUrl: (rawInfo.downloadUrl || '').trim(),
+                downloadAsset: (rawInfo.downloadAsset || '').trim(),
+                downloadKind: (rawInfo.downloadKind || '').trim(),
+                inAppEligible: Boolean(rawInfo.inAppEligible),
+                inAppReason: (rawInfo.inAppReason || '').trim(),
+                publishedAt: (rawInfo.publishedAt || '').trim(),
+                notes: rawInfo.notes || '',
+            };
+
             setUpdateInfo(info);
             setIsUpdateDismissed(false);
             if (!resolvedVersion && info.currentVersion) {
@@ -523,12 +547,34 @@ function App() {
         }
     }
 
+    function getInAppUpdateUnavailableMessage() {
+        const reason = (updateInfo?.inAppReason || '').trim();
+        if (reason) {
+            return reason;
+        }
+
+        return 'In-app update is unavailable for this release.';
+    }
+
+    function notifyInAppUpdateUnavailable(customMessage?: string) {
+        const message = (customMessage || getInAppUpdateUnavailableMessage()).trim() || 'In-app update is unavailable for this release.';
+        lastStatusToastRef.current = message;
+        setStatus(message);
+        setRecoveryHint('Use View notes to open the release page and install manually.');
+        showToast(message, 'error');
+    }
+
     async function onInstallUpdate() {
         const downloadUrl = (updateInfo?.downloadUrl || '').trim();
         const releaseUrl = (updateInfo?.releaseUrl || '').trim();
 
+        if (!updateInfo?.inAppEligible) {
+            notifyInAppUpdateUnavailable();
+            return;
+        }
+
         if (!downloadUrl) {
-            await onOpenUpdateLink(releaseUrl, 'release page');
+            notifyInAppUpdateUnavailable('In-app update is unavailable: installer download URL is missing.');
             return;
         }
 
@@ -548,9 +594,9 @@ function App() {
             const message = result.message?.trim() || 'Installer launched. Closing app to finish update...';
 
             if (!result.started) {
-                const fallbackMessage = message || 'Installer did not start. Opening fallback release page.';
+                const fallbackMessage = message || 'Installer did not start. Retry Update now.';
                 setStatus(fallbackMessage);
-                setRecoveryHint('In-app installer launch was not confirmed. Use View release if you want to install from browser.');
+                setRecoveryHint('In-app installer launch was not confirmed. Retry Update now, or use View notes for manual install.');
                 setUpdateInstallLabel('Installing...');
                 setUpdateInstallPercent(null);
                 setUpdateInstallEta(null);
@@ -573,12 +619,12 @@ function App() {
             window.setTimeout(() => {
                 setIsLoading(false);
                 setIsUpdateInstalling(false);
-                setRecoveryHint('If the installer did not open, use the update button again or open the release page.');
+                setRecoveryHint('If the installer did not open, use Update now again or use View notes for manual install.');
             }, 7000);
         } catch (error) {
             const feedback = toErrorFeedback(error, 'In-app update failed');
             setStatus(feedback.message);
-            setRecoveryHint(feedback.hint || 'Use View release if you want to install from browser.');
+            setRecoveryHint(feedback.hint || 'Retry Update now, or use View notes for manual install.');
             setUpdateInstallLabel('Installing...');
             setUpdateInstallPercent(null);
             setUpdateInstallEta(null);
@@ -592,12 +638,16 @@ function App() {
     }
 
     async function onUpdatePrimaryAction() {
-        if (isInstallerUpdate) {
-            await onInstallUpdate();
+        if (!updateInfo) {
             return;
         }
 
-        await onOpenUpdateLink(updateInfo?.downloadUrl || updateInfo?.releaseUrl || '', 'update download');
+        if (!updateInfo.inAppEligible) {
+            notifyInAppUpdateUnavailable();
+            return;
+        }
+
+        await onInstallUpdate();
     }
 
     async function onRunHealthCheck() {
@@ -1382,6 +1432,9 @@ function App() {
                         <div className="update-banner-copy">
                             <strong>New version {updateInfo.latestVersion} is available.</strong>
                             <span className="update-current">You&apos;re on {appVersion || updateInfo.currentVersion || 'unknown'}.</span>
+                            {!isInAppUpdateEligible && (
+                                <span className="update-progress-hint">{getInAppUpdateUnavailableMessage()}</span>
+                            )}
                             {isUpdateInstalling && (
                                 <div className="update-progress-wrap">
                                     <div className="update-progress-row">
@@ -1430,7 +1483,7 @@ function App() {
                             <button
                                 className="action-btn"
                                 onClick={() => void onUpdatePrimaryAction()}
-                                disabled={isLoading || isUpdateInstalling || isModalOpen || !(updateInfo.downloadUrl || updateInfo.releaseUrl)}
+                                disabled={isLoading || isUpdateInstalling || isModalOpen}
                             >
                                 {isUpdateInstalling ? 'Installing...' : updatePrimaryLabel}
                             </button>
