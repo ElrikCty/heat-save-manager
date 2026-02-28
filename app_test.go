@@ -88,3 +88,64 @@ func TestCreateMarkerFileAcceptsValidExistingProfile(t *testing.T) {
 		t.Fatalf("expected marker creation to succeed: %v", err)
 	}
 }
+
+func TestSelectPreferredWindowsAssetPrefersInstallerVariants(t *testing.T) {
+	assets := []releaseAsset{
+		{Name: "HeatSaveManager-v1.0.9-windows-x64.zip", BrowserDownloadURL: "https://example.com/app.zip"},
+		{Name: "HeatSaveManager-v1.0.9-windows-x64.exe", BrowserDownloadURL: "https://example.com/app.exe"},
+		{Name: "HeatSaveManager-amd64-installer.exe", BrowserDownloadURL: "https://example.com/app-installer.exe"},
+	}
+
+	selected := selectPreferredWindowsAsset(assets)
+	if selected.Kind != "installer" {
+		t.Fatalf("expected installer asset, got %q", selected.Kind)
+	}
+
+	if selected.URL != "https://example.com/app-installer.exe" {
+		t.Fatalf("unexpected installer url: %q", selected.URL)
+	}
+
+	if selected.InAppReason != "" {
+		t.Fatalf("expected empty in-app reason for installer selection, got %q", selected.InAppReason)
+	}
+}
+
+func TestSelectPreferredWindowsAssetFallsBackWhenInstallerMissing(t *testing.T) {
+	assets := []releaseAsset{
+		{Name: "HeatSaveManager-v1.0.9-windows-x64.zip", BrowserDownloadURL: "https://example.com/app.zip"},
+		{Name: "HeatSaveManager-v1.0.9-windows-x64.exe", BrowserDownloadURL: "https://example.com/app.exe"},
+	}
+
+	selected := selectPreferredWindowsAsset(assets)
+	if selected.Kind != "exe" {
+		t.Fatalf("expected exe fallback, got %q", selected.Kind)
+	}
+
+	if selected.URL != "https://example.com/app.exe" {
+		t.Fatalf("unexpected exe fallback url: %q", selected.URL)
+	}
+
+	if !strings.Contains(strings.ToLower(selected.InAppReason), "installer") {
+		t.Fatalf("expected installer-missing reason, got %q", selected.InAppReason)
+	}
+}
+
+func TestSelectPreferredWindowsAssetSkipsArmInstaller(t *testing.T) {
+	assets := []releaseAsset{
+		{Name: "HeatSaveManager-v1.0.9-windows-arm64-installer.exe", BrowserDownloadURL: "https://example.com/app-arm-installer.exe"},
+		{Name: "HeatSaveManager-v1.0.9-windows-x64.exe", BrowserDownloadURL: "https://example.com/app.exe"},
+	}
+
+	selected := selectPreferredWindowsAsset(assets)
+	if selected.Kind != "exe" {
+		t.Fatalf("expected x64 exe fallback, got %q", selected.Kind)
+	}
+
+	if selected.URL != "https://example.com/app.exe" {
+		t.Fatalf("unexpected fallback url: %q", selected.URL)
+	}
+
+	if !strings.Contains(strings.ToLower(selected.InAppReason), "installer") {
+		t.Fatalf("expected installer-missing reason, got %q", selected.InAppReason)
+	}
+}

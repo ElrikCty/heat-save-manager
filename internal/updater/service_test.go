@@ -65,6 +65,10 @@ func TestStartDownloadsAndLaunchesInstaller(t *testing.T) {
 		t.Fatalf("expected installer filename, got %q", launcher.startedPath)
 	}
 
+	if filepath.Base(launcher.startedPath) != "HeatSaveManager-v1.0.5-windows-x64-installer.exe" {
+		t.Fatalf("expected canonical installer basename, got %q", filepath.Base(launcher.startedPath))
+	}
+
 	if result.FallbackURL != server.URL+"/release" {
 		t.Fatalf("expected fallback URL to be release URL, got %q", result.FallbackURL)
 	}
