@@ -36,6 +36,78 @@ function Try-GetPRMetadata([int]$number, [string]$repo) {
     }
 }
 
+function Add-Contributor([System.Collections.Generic.HashSet[string]]$set, [string]$contributor) {
+    if (-not $set) {
+        return
+    }
+
+    $normalized = ([string]$contributor).Trim()
+    if (-not $normalized -or $normalized -eq 'unknown') {
+        return
+    }
+
+    [void]$set.Add($normalized)
+}
+
+function Try-GetCompareContributorLogins([string]$repo, [string]$baseTag, [string]$headTag) {
+    if (-not $baseTag) {
+        return @()
+    }
+
+    try {
+        $rawLogins = gh api "repos/$repo/compare/$baseTag...$headTag" --jq ".commits[].author.login"
+        if (-not $rawLogins) {
+            return @()
+        }
+
+        $normalizedLogins = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $rawLogins) {
+            $login = ([string]$entry).Trim()
+            if ($login) {
+                [void]$normalizedLogins.Add("@$login")
+            }
+        }
+
+        return @($normalizedLogins)
+    } catch {
+        return @()
+    }
+}
+
+function Try-GetCompareCommitAuthorMap([string]$repo, [string]$baseTag, [string]$headTag) {
+    if (-not $baseTag) {
+        return @{}
+    }
+
+    try {
+        $rows = gh api "repos/$repo/compare/$baseTag...$headTag" --jq ".commits[] | [.sha, .author.login] | @tsv"
+        $authorByCommit = @{}
+
+        foreach ($row in $rows) {
+            if (-not $row) {
+                continue
+            }
+
+            $parts = ([string]$row).Split("`t", 2)
+            if ($parts.Length -lt 2) {
+                continue
+            }
+
+            $sha = ([string]$parts[0]).Trim()
+            $login = ([string]$parts[1]).Trim()
+            if (-not $sha -or -not $login -or $login -eq 'null') {
+                continue
+            }
+
+            $authorByCommit[$sha] = "@$login"
+        }
+
+        return $authorByCommit
+    } catch {
+        return @{}
+    }
+}
+
 if (-not (git rev-parse --verify $Tag 2>$null)) {
     throw "Tag not found: $Tag"
 }
@@ -45,55 +117,102 @@ if (-not $PreviousTag) {
 }
 
 $range = if ($PreviousTag) { "$PreviousTag..$Tag" } else { $Tag }
-$logLines = git log --pretty=format:"%h`t%s" $range
+$logLines = git log --pretty=format:"%H`t%h`t%s`t%an" $range
 
 $prItems = New-Object System.Collections.Generic.List[object]
 $directCommitItems = New-Object System.Collections.Generic.List[object]
 $prTitleSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+$contributors = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+
+$compareContributorLogins = Try-GetCompareContributorLogins $Repo $PreviousTag $Tag
+$hasCompareContributorLogins = $compareContributorLogins.Count -gt 0
+foreach ($contributor in $compareContributorLogins) {
+    Add-Contributor $contributors $contributor
+}
+
+$compareCommitAuthorMap = Try-GetCompareCommitAuthorMap $Repo $PreviousTag $Tag
+$hasCompareCommitAuthorMap = $compareCommitAuthorMap.Keys.Count -gt 0
 
 foreach ($line in $logLines) {
     if (-not $line) {
         continue
     }
 
-    $parts = $line -split "`t", 2
-    if ($parts.Length -ne 2) {
+    $parts = $line -split "`t", 4
+    if ($parts.Length -lt 3) {
         continue
     }
 
-    $hash = $parts[0].Trim()
-    $subject = $parts[1].Trim()
+    $fullHash = $parts[0].Trim()
+    $hash = $parts[1].Trim()
+    $subject = $parts[2].Trim()
+    $commitAuthor = if ($parts.Length -ge 4) { $parts[3].Trim() } else { '' }
 
     $match = [Regex]::Match($subject, '^Merge pull request #(\d+)')
     if ($match.Success) {
         $number = [int]$match.Groups[1].Value
         $meta = Try-GetPRMetadata $number $Repo
         if ($meta) {
+            $authorLogin = ([string]$meta.author.login).Trim()
             $prItems.Add([PSCustomObject]@{
                 Number = $number
                 Title = $meta.title
-                Author = $meta.author.login
+                Author = $authorLogin
                 URL = $meta.url
             })
+
+            if ($authorLogin) {
+                Add-Contributor $contributors "@$authorLogin"
+            }
+
             if ($meta.title) {
                 [void]$prTitleSet.Add($meta.title.Trim())
             }
         } else {
+            $fallbackAuthorLogin = ''
+            if ($hasCompareCommitAuthorMap -and $compareCommitAuthorMap.ContainsKey($fullHash)) {
+                $fallbackAuthorLogin = ([string]$compareCommitAuthorMap[$fullHash]).Trim().TrimStart('@')
+            }
+
+            if (-not $fallbackAuthorLogin) {
+                $fallbackAuthorLogin = 'unknown'
+            }
+
             $prItems.Add([PSCustomObject]@{
                 Number = $number
                 Title = "Pull request #$number"
-                Author = "unknown"
+                Author = $fallbackAuthorLogin
                 URL = "https://github.com/$Repo/pull/$number"
             })
+
+            if (-not $hasCompareContributorLogins) {
+                Add-Contributor $contributors $commitAuthor
+            }
         }
 
         continue
     }
 
     if ($subject -notlike 'Merge branch*' -and -not $prTitleSet.Contains($subject)) {
+        $resolvedDirectAuthor = ''
+        if ($hasCompareCommitAuthorMap -and $compareCommitAuthorMap.ContainsKey($fullHash)) {
+            $resolvedDirectAuthor = ([string]$compareCommitAuthorMap[$fullHash]).Trim()
+        }
+
+        if (-not $resolvedDirectAuthor) {
+            $resolvedDirectAuthor = $commitAuthor
+        }
+
+        if ($hasCompareContributorLogins) {
+            Add-Contributor $contributors $resolvedDirectAuthor
+        } else {
+            Add-Contributor $contributors $commitAuthor
+        }
+
         $directCommitItems.Add([PSCustomObject]@{
             Hash = $hash
             Subject = $subject
+            Author = $resolvedDirectAuthor
         })
     }
 }
@@ -123,11 +242,30 @@ if ($prItems.Count -eq 0 -and $directCommitItems.Count -eq 0) {
 }
 
 foreach ($pr in $prItems) {
-    $lines.Add("- $($pr.Title) (#$($pr.Number)) by @$($pr.Author) in $($pr.URL)")
+    if ($pr.Author -and $pr.Author -ne 'unknown') {
+        $lines.Add("- $($pr.Title) (#$($pr.Number)) by @$($pr.Author) in $($pr.URL)")
+    } else {
+        $lines.Add("- $($pr.Title) (#$($pr.Number)) in $($pr.URL)")
+    }
 }
 
 foreach ($commit in $directCommitItems) {
-    $lines.Add("- $($commit.Subject) ($($commit.Hash))")
+    if ($commit.Author) {
+        $lines.Add("- $($commit.Subject) ($($commit.Hash)) by $($commit.Author)")
+    } else {
+        $lines.Add("- $($commit.Subject) ($($commit.Hash))")
+    }
+}
+
+$lines.Add('')
+$lines.Add('## Contributors')
+
+if ($contributors.Count -eq 0) {
+    $lines.Add('- No contributor metadata detected.')
+} else {
+    foreach ($contributor in (@($contributors) | Sort-Object)) {
+        $lines.Add("- $contributor")
+    }
 }
 
 $lines.Add('')
