@@ -1208,20 +1208,50 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(6, 10, 20, 0.72);
+    background: rgba(6, 10, 20, 0.76);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
     display: grid;
     place-items: center;
     padding: 1rem;
     z-index: 60;
+    overflow-y: auto;
+    animation: modal-overlay-in 0.16s ease-out;
 }
+
+@keyframes modal-overlay-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 .modal-card {
     width: min(460px, 100%);
     background: linear-gradient(165deg, rgba(19, 25, 37, 0.97), rgba(16, 22, 34, 0.98));
     border: 1px solid rgba(122, 150, 189, 0.28);
-    border-radius: 10px;
+    border-radius: 12px;
     box-shadow: 0 18px 34px rgba(0, 0, 0, 0.4);
     padding: 0.92rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    animation: modal-card-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+@keyframes modal-card-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.modal-card.danger {
+    border-color: rgba(188, 66, 83, 0.46);
+    background: linear-gradient(165deg, rgba(31, 18, 25, 0.98), rgba(26, 15, 22, 0.98));
+}
+
 .modal-card h3 {
     margin: 0;
     font-size: 0.96rem;
@@ -1233,6 +1263,7 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     margin: 0.52rem 0 0.82rem;
     color: rgba(188, 202, 223, 0.62);
     font-size: 0.8rem;
+    line-height: 1.38;
 }
 
 .modal-card .field-label {
@@ -1264,7 +1295,18 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     white-space: nowrap;
 }
 
-.modal-actions { margin-top: 0.84rem; display: flex; gap: 0.5rem; justify-content: flex-end; }
+.modal-actions {
+    margin-top: 0.84rem;
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.modal-actions .switch-btn,
+.modal-actions .action-btn {
+    min-height: 2.2rem;
+}
 
 .export-modal-card .field-label {
     margin: 0 0 0.36rem;
@@ -1396,6 +1438,20 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     .refresh-btn { width: 100%; }
     .panel-header-row,
     .bundle-header-row { align-items: flex-start; flex-direction: column; }
+
+    .modal-overlay {
+        padding: 0.72rem;
+    }
+
+    .modal-card {
+        width: 100%;
+        max-height: calc(100vh - 1.45rem);
+    }
+
+    .modal-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
 
     .update-banner {
         align-items: flex-start;
