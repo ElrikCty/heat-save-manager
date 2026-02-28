@@ -294,6 +294,7 @@ function App() {
     const [selectedProfileName, setSelectedProfileName] = useState('');
     const [toastMessage, setToastMessage] = useState('');
     const [toastKind, setToastKind] = useState<ToastKind>('success');
+    const [toastSequence, setToastSequence] = useState(0);
     const [appVersion, setAppVersion] = useState('');
     const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
     const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
@@ -329,6 +330,7 @@ function App() {
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
     const needsProfilesFolderFix = healthReport?.items.some((item) => item.name === 'profiles_path' && !item.ok) ?? false;
     const needsMarkerFileFix = markerHealthItem ? !markerHealthItem.ok : false;
+    const needsCombinedSetupFix = needsProfilesFolderFix && needsMarkerFileFix;
     const hasQuickActions = needsSaveGamePathFix || needsProfilesFolderFix || needsMarkerFileFix;
     const hasDiagnosticErrors = healthReport?.items.some((item) => item.severity === 'error') ?? false;
     const hasDiagnosticWarnings = healthReport?.items.some((item) => item.severity === 'warn') ?? false;
@@ -361,11 +363,12 @@ function App() {
     function showToast(message: string, kind: ToastKind = 'success') {
         setToastKind(kind);
         setToastMessage(message);
+        setToastSequence((current) => current + 1);
     }
 
     function inferStatusToastKind(message: string): ToastKind {
         const lower = message.toLowerCase();
-        if (lower.includes('failed') || lower.includes('cannot') || lower.includes('error') || lower.includes('missing') || lower.includes('invalid')) {
+        if (lower.includes('failed') || lower.includes('cannot') || lower.includes('error') || lower.includes('missing') || lower.includes('invalid') || lower.includes('must point to')) {
             return 'error';
         }
 
@@ -628,13 +631,21 @@ function App() {
     async function onApplyPath() {
         const trimmed = saveGamePathInput.trim();
         if (!trimmed) {
-            setStatus('SaveGame path cannot be empty.');
+            const message = 'SaveGame path cannot be empty.';
+            lastStatusToastRef.current = message;
+            setStatus(message);
+            setRecoveryHint('');
+            showToast(message, 'error');
             return;
         }
 
         const normalized = trimmed.replace(/[\\/]+$/, '');
         if (!/[\\/]Need for speed heat[\\/]SaveGame$/i.test(normalized)) {
-            setStatus('Path must point to Need for speed heat\\SaveGame.');
+            const message = 'Path must point to Need for speed heat\\SaveGame.';
+            lastStatusToastRef.current = message;
+            setStatus(message);
+            setRecoveryHint('');
+            showToast(message, 'error');
             return;
         }
 
@@ -654,7 +665,7 @@ function App() {
         }
     }
 
-    async function onBrowseSaveGamePath() {
+    async function onBrowseSaveGamePath(openConfirmModal = false) {
         try {
             const selectedPath = (await PickSaveGamePath()).trim();
             if (!selectedPath) {
@@ -664,6 +675,9 @@ function App() {
             setSaveGamePathInput(selectedPath);
             setStatus('SaveGame path selected. Confirm path to apply.');
             setRecoveryHint('');
+            if (openConfirmModal) {
+                setIsSavePathSetupOpen(true);
+            }
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Could not open folder picker');
             setStatus(feedback.message);
@@ -684,6 +698,50 @@ function App() {
             }
         } catch (error) {
             const feedback = toErrorFeedback(error, 'Failed to create Profiles folder');
+            setStatus(feedback.message);
+            setRecoveryHint(feedback.hint);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    async function onCompleteSetup() {
+        try {
+            setIsLoading(true);
+            setStatus('Completing setup...');
+            setRecoveryHint('');
+
+            await EnsureProfilesFolder();
+            const profileItems = await ListProfiles();
+            await loadData();
+
+            if (profileItems.length === 0) {
+                setDiagnosticsModal('firstSave');
+                setStatus('Profiles folder is ready. Save current progress to create your first profile.');
+                return;
+            }
+
+            if (profileItems.length === 1) {
+                const singleProfileName = profileItems[0].name;
+                setStatus(`Setting ${singleProfileName} as active profile...`);
+                await CreateMarkerFile(singleProfileName);
+                setActiveProfile(singleProfileName);
+                await loadData();
+                setStatus(`Setup complete. Active profile set to ${singleProfileName}.`);
+                return;
+            }
+
+            setMarkerDialogProfile((current) => {
+                if (current && profileItems.some((profile) => profile.name === current)) {
+                    return current;
+                }
+
+                return profileItems[0]?.name ?? '';
+            });
+            setDiagnosticsModal('marker');
+            setStatus('Profiles folder is ready. Choose which profile should be active.');
+        } catch (error) {
+            const feedback = toErrorFeedback(error, 'Complete setup failed');
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -1305,7 +1363,7 @@ function App() {
                 toastTimerRef.current = null;
             }
         };
-    }, [toastMessage]);
+    }, [toastMessage, toastSequence]);
 
     return (
         <div className={`app-shell${hasQuickActions ? ' quick-actions-focus' : ''}`}>
@@ -1406,15 +1464,23 @@ function App() {
                                     Set SaveGame path
                                 </button>
                             )}
-                            {needsProfilesFolderFix && (
-                                <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('profiles')} disabled={isLoading || isModalOpen}>
-                                    Create Profiles folder
+                            {needsCombinedSetupFix ? (
+                                <button className="action-btn secondary attention" onClick={() => void onCompleteSetup()} disabled={isLoading || isModalOpen}>
+                                    Complete setup
                                 </button>
-                            )}
-                            {needsMarkerFileFix && (
-                                <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('marker')} disabled={isLoading || isModalOpen}>
-                                    Set active profile
-                                </button>
+                            ) : (
+                                <>
+                                    {needsProfilesFolderFix && (
+                                        <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('profiles')} disabled={isLoading || isModalOpen}>
+                                            Create Profiles folder
+                                        </button>
+                                    )}
+                                    {needsMarkerFileFix && (
+                                        <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('marker')} disabled={isLoading || isModalOpen}>
+                                            Set active profile
+                                        </button>
+                                    )}
+                                </>
                             )}
                         </div>
                     )}
@@ -1606,7 +1672,7 @@ function App() {
                             <span>SaveGame Path</span>
                         </label>
                         <p className="path">{saveGamePath ? maskWindowsUserPath(saveGamePath) : 'Not set'}</p>
-                        <div className="field-row">
+                        <div className="field-row savegame-path-row">
                             <input
                                 id="savegame-path-input"
                                 value={saveGamePathInput}
@@ -1614,8 +1680,8 @@ function App() {
                                 placeholder="C:\\Users\\<user>\\Documents\\Need for speed heat\\SaveGame"
                                 disabled={isLoading || isModalOpen}
                             />
-                            <button className="action-btn secondary" onClick={() => void onApplyPath()} disabled={isLoading || isModalOpen || !canApplyPath}>
-                                Apply Path
+                            <button className="action-btn secondary" onClick={() => void onBrowseSaveGamePath(true)} disabled={isLoading || isModalOpen}>
+                                Browse...
                             </button>
                         </div>
                         <p className="field-hint">Path must point to <span className="path-token">Need for speed heat\SaveGame</span>.</p>

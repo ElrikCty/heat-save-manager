@@ -801,6 +801,14 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     font-size: 0.8rem;
 }
 
+.savegame-path-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.savegame-path-row .action-btn.secondary {
+    min-width: 104px;
+}
+
 .save-setup-panel .field-hint {
     margin-top: 0.72rem;
     font-size: 0.68rem;
@@ -1239,6 +1247,23 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     margin: 0.52rem 0 0;
 }
 
+.save-path-setup-card .modal-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    align-items: stretch;
+}
+
+.save-path-setup-card .modal-actions .switch-btn,
+.save-path-setup-card .modal-actions .action-btn {
+    width: 100%;
+    min-height: 2.3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+}
+
 .modal-actions { margin-top: 0.84rem; display: flex; gap: 0.5rem; justify-content: flex-end; }
 
 .export-modal-card .field-label {
@@ -1385,5 +1410,9 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
         right: 0.62rem;
         bottom: 0.58rem;
         font-size: 0.64rem;
+    }
+
+    .save-path-setup-card .modal-actions {
+        grid-template-columns: 1fr;
     }
 }
