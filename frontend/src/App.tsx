@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CircleX, Download, Edit3, FileText, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Save, Trash2, Upload, Zap} from 'lucide-react';
+import {AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CircleX, Download, Edit3, FileText, Folder, FolderOpen, HardDrive, Info, Plus, RefreshCw, Save, Trash2, Upload, Zap} from 'lucide-react';
 import './App.css';
 import {EventsOn, Quit} from '../wailsjs/runtime/runtime';
 import {
@@ -272,6 +272,7 @@ function formatRate(bytesPerSecond: number): string {
 const updateProgressEventName = 'updater:progress';
 const slowNetworkThresholdBps = 256 * 1024;
 const slowNetworkDelayMs = 5000;
+const toastVisibilityMs = 6400;
 
 function App() {
     type ToastKind = 'success' | 'info' | 'error';
@@ -377,12 +378,63 @@ function App() {
     }
 
     function inferStatusToastKind(message: string): ToastKind {
-        const lower = message.toLowerCase();
-        if (lower.includes('failed') || lower.includes('cannot') || lower.includes('error') || lower.includes('missing') || lower.includes('invalid') || lower.includes('must point to')) {
+        const lower = message.trim().toLowerCase();
+
+        const errorPrefixes = ['choose ', 'enter ', 'select ', 'browse and choose ', 'no active profile'];
+        if (errorPrefixes.some((prefix) => lower.startsWith(prefix))) {
             return 'error';
         }
 
-        if (lower.endsWith("...") || lower.includes('running')) {
+        const errorFragments = [
+            'failed',
+            'cannot',
+            'error',
+            'missing',
+            'invalid',
+            'must point to',
+            'must differ',
+            'requires',
+            'unavailable',
+            'not found',
+            'no longer exists',
+            'locked',
+            'unsafe',
+            'malformed',
+            'did not',
+            'denied',
+            'cancelled',
+            'canceled',
+            'cannot execute',
+        ];
+        if (errorFragments.some((fragment) => lower.includes(fragment))) {
+            return 'error';
+        }
+
+        const infoPrefixes = [
+            'opening ',
+            'running ',
+            'refreshing ',
+            'downloading ',
+            'applying ',
+            'creating ',
+            'completing ',
+            'setting ',
+            'switching ',
+            'saving ',
+            'exporting ',
+            'importing ',
+            'renaming ',
+            'deleting ',
+            'validating ',
+            'launching ',
+            'working ',
+        ];
+        if (
+            lower.endsWith('...')
+            || infoPrefixes.some((prefix) => lower.startsWith(prefix))
+            || lower.includes('closing app')
+            || lower.includes('confirm path')
+        ) {
             return 'info';
         }
 
@@ -1405,7 +1457,7 @@ function App() {
         toastTimerRef.current = window.setTimeout(() => {
             setToastMessage('');
             toastTimerRef.current = null;
-        }, 3200);
+        }, toastVisibilityMs);
 
         return () => {
             if (toastTimerRef.current !== null) {
@@ -1795,7 +1847,11 @@ function App() {
 
             {toastMessage && (
                 <div className={`toast ${toastKind === 'info' ? 'toast-info' : toastKind === 'error' ? 'toast-error' : 'toast-success'}`} role="status" aria-live="polite">
-                    {toastKind === 'error' ? <AlertTriangle size={15} strokeWidth={2.2} /> : <CheckCircle2 size={15} strokeWidth={2.2} />} {toastMessage}
+                    {toastKind === 'error'
+                        ? <AlertTriangle size={16} strokeWidth={2.2} />
+                        : toastKind === 'info'
+                            ? <Info size={16} strokeWidth={2.2} />
+                            : <CheckCircle2 size={16} strokeWidth={2.2} />} {toastMessage}
                 </div>
             )}
 
