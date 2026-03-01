@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"heat-save-manager/internal/config"
 )
 
 func TestApplySaveGamePathRequiresNeedForSpeedHeatParent(t *testing.T) {
@@ -86,6 +88,85 @@ func TestCreateMarkerFileAcceptsValidExistingProfile(t *testing.T) {
 
 	if err := app.CreateMarkerFile(profileName); err != nil {
 		t.Fatalf("expected marker creation to succeed: %v", err)
+	}
+}
+
+func TestGetLanguageDefaultsToEnglish(t *testing.T) {
+	app := &App{}
+
+	if got := app.GetLanguage(); got != languageEnglish {
+		t.Fatalf("expected default language %q, got %q", languageEnglish, got)
+	}
+}
+
+func TestSetLanguagePersistsSelection(t *testing.T) {
+	store := config.NewStoreWithDir(filepath.Join(t.TempDir(), "config-root"))
+	app := &App{configStore: store}
+
+	if err := app.SetLanguage("es"); err != nil {
+		t.Fatalf("set language: %v", err)
+	}
+
+	if got := app.GetLanguage(); got != languageSpanish {
+		t.Fatalf("expected app language %q, got %q", languageSpanish, got)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if loaded.Language != languageSpanish {
+		t.Fatalf("expected persisted language %q, got %q", languageSpanish, loaded.Language)
+	}
+}
+
+func TestSetLanguageRejectsUnsupportedLanguage(t *testing.T) {
+	app := &App{}
+
+	if err := app.SetLanguage("fr"); err == nil {
+		t.Fatal("expected unsupported language error")
+	}
+}
+
+func TestSetSaveGamePathPreservesConfiguredLanguage(t *testing.T) {
+	store := config.NewStoreWithDir(filepath.Join(t.TempDir(), "config-root"))
+	if err := store.Save(config.AppConfig{Language: languageSpanish}); err != nil {
+		t.Fatalf("save seed config: %v", err)
+	}
+
+	root := t.TempDir()
+	validSaveGamePath := filepath.Join(root, "Need for speed heat", "SaveGame")
+	if err := os.MkdirAll(validSaveGamePath, 0o755); err != nil {
+		t.Fatalf("create valid savegame path: %v", err)
+	}
+
+	app := &App{configStore: store}
+	if err := app.SetSaveGamePath(validSaveGamePath); err != nil {
+		t.Fatalf("set savegame path: %v", err)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load updated config: %v", err)
+	}
+
+	if loaded.Language != languageSpanish {
+		t.Fatalf("expected language %q to be preserved, got %q", languageSpanish, loaded.Language)
+	}
+}
+
+func TestApplySavedSettingsLoadsLanguageWithoutPath(t *testing.T) {
+	store := config.NewStoreWithDir(filepath.Join(t.TempDir(), "config-root"))
+	if err := store.Save(config.AppConfig{Language: languageSpanish}); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	app := &App{configStore: store}
+	app.applySavedSettings()
+
+	if got := app.GetLanguage(); got != languageSpanish {
+		t.Fatalf("expected loaded language %q, got %q", languageSpanish, got)
 	}
 }
 
