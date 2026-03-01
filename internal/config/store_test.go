@@ -23,6 +23,10 @@ func TestLoadReturnsDefaultWhenMissingFile(t *testing.T) {
 	if cfg.CheckGameRunning != defaults.CheckGameRunning {
 		t.Fatalf("expected CheckGameRunning=%v, got %v", defaults.CheckGameRunning, cfg.CheckGameRunning)
 	}
+
+	if cfg.Language != defaults.Language {
+		t.Fatalf("expected Language=%q, got %q", defaults.Language, cfg.Language)
+	}
 }
 
 func TestSaveAndLoadRoundTrip(t *testing.T) {
@@ -32,6 +36,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	wanted := AppConfig{
 		SaveGamePath:       `C:\Users\Example\Documents\Need for speed heat\SaveGame`,
 		ProfilesPath:       `C:\Users\Example\Documents\Need for speed heat\SaveGame\Profiles`,
+		Language:           "es",
 		BackupBeforeSwitch: true,
 		CheckGameRunning:   false,
 	}
@@ -64,5 +69,35 @@ func TestLoadInvalidJSONFails(t *testing.T) {
 
 	if _, err := store.Load(); err == nil {
 		t.Fatal("expected invalid json error")
+	}
+}
+
+func TestLoadAppliesDefaultsForMissingFields(t *testing.T) {
+	t.Parallel()
+
+	store := NewStoreWithDir(filepath.Join(t.TempDir(), "config-root"))
+	if err := os.MkdirAll(filepath.Dir(store.Path()), 0o755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+
+	if err := os.WriteFile(store.Path(), []byte(`{"saveGamePath":"C:\\\\Users\\\\Example\\\\Documents\\\\Need for speed heat\\\\SaveGame"}`), 0o644); err != nil {
+		t.Fatalf("write partial config: %v", err)
+	}
+
+	cfg, err := store.Load()
+	if err != nil {
+		t.Fatalf("load partial config: %v", err)
+	}
+
+	if cfg.Language != DefaultLanguage {
+		t.Fatalf("expected default Language=%q, got %q", DefaultLanguage, cfg.Language)
+	}
+
+	if !cfg.BackupBeforeSwitch {
+		t.Fatal("expected BackupBeforeSwitch default true")
+	}
+
+	if !cfg.CheckGameRunning {
+		t.Fatal("expected CheckGameRunning default true")
 	}
 }

@@ -45,7 +45,7 @@ func (s *Store) Load() (AppConfig, error) {
 		return AppConfig{}, err
 	}
 
-	var cfg AppConfig
+	cfg := Default()
 	if err := json.Unmarshal(content, &cfg); err != nil {
 		return AppConfig{}, err
 	}

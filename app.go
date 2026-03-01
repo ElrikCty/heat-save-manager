@@ -32,6 +32,8 @@ const (
 	defaultUserAgent    = "heat-save-manager-update-check"
 	defaultHTTPTimeout  = 8 * time.Second
 	updateProgressEvent = "updater:progress"
+	languageEnglish     = "en"
+	languageSpanish     = "es"
 )
 
 var appVersion = "dev"
@@ -41,6 +43,7 @@ type App struct {
 	ctx          context.Context
 	saveGamePath string
 	profilesPath string
+	language     string
 	configStore  *config.Store
 }
 
@@ -51,7 +54,10 @@ func NewApp() *App {
 		store = nil
 	}
 
-	return &App{configStore: store}
+	return &App{
+		language:    config.DefaultLanguage,
+		configStore: store,
+	}
 }
 
 // startup is called when the app starts. The context is saved
@@ -111,19 +117,27 @@ func (a *App) SetSaveGamePath(saveGamePath string) error {
 		return err
 	}
 
-	if a.configStore == nil {
-		return nil
+	return a.updateConfig(func(cfg *config.AppConfig) {
+		cfg.SaveGamePath = a.saveGamePath
+		cfg.ProfilesPath = a.profilesPath
+	})
+}
+
+func (a *App) GetLanguage() string {
+	return normalizeLanguage(a.language)
+}
+
+func (a *App) SetLanguage(language string) error {
+	normalized, err := validateLanguage(language)
+	if err != nil {
+		return err
 	}
 
-	cfg := config.Default()
-	cfg.SaveGamePath = a.saveGamePath
-	cfg.ProfilesPath = a.profilesPath
+	a.language = normalized
 
-	if err := a.configStore.Save(cfg); err != nil {
-		return fmt.Errorf("save app settings: %w", err)
-	}
-
-	return nil
+	return a.updateConfig(func(cfg *config.AppConfig) {
+		cfg.Language = normalized
+	})
 }
 
 func (a *App) GetAppVersion() string {
@@ -466,21 +480,75 @@ func (a *App) newMarkerStore() *marker.Store {
 	return marker.NewStore(a.saveGamePath)
 }
 
-func (a *App) applySavedSettings() {
+func (a *App) loadConfigOrDefault() config.AppConfig {
+	cfg := config.Default()
 	if a.configStore == nil {
-		return
+		cfg.Language = normalizeLanguage(cfg.Language)
+		return cfg
 	}
 
-	cfg, err := a.configStore.Load()
-	if err != nil {
-		return
+	loaded, err := a.configStore.Load()
+	if err == nil {
+		cfg = loaded
 	}
+
+	cfg.Language = normalizeLanguage(cfg.Language)
+	return cfg
+}
+
+func (a *App) updateConfig(update func(*config.AppConfig)) error {
+	if a.configStore == nil {
+		return nil
+	}
+
+	cfg := a.loadConfigOrDefault()
+	if update != nil {
+		update(&cfg)
+	}
+
+	if strings.TrimSpace(cfg.Language) == "" {
+		cfg.Language = normalizeLanguage(a.language)
+	}
+
+	if err := a.configStore.Save(cfg); err != nil {
+		return fmt.Errorf("save app settings: %w", err)
+	}
+
+	return nil
+}
+
+func (a *App) applySavedSettings() {
+	cfg := a.loadConfigOrDefault()
+	a.language = normalizeLanguage(cfg.Language)
 
 	if strings.TrimSpace(cfg.SaveGamePath) == "" {
 		return
 	}
 
 	_ = a.applySaveGamePath(cfg.SaveGamePath)
+}
+
+func normalizeLanguage(language string) string {
+	switch strings.ToLower(strings.TrimSpace(language)) {
+	case languageSpanish, "es-es", "es-419", "es-mx":
+		return languageSpanish
+	default:
+		return languageEnglish
+	}
+}
+
+func validateLanguage(language string) (string, error) {
+	trimmed := strings.ToLower(strings.TrimSpace(language))
+	switch trimmed {
+	case languageEnglish, "en-us", "en-gb":
+		return languageEnglish, nil
+	case languageSpanish, "es-es", "es-419", "es-mx":
+		return languageSpanish, nil
+	case "":
+		return "", errors.New("language is required")
+	default:
+		return "", errors.New("unsupported language")
+	}
 }
 
 func (a *App) applySaveGamePath(saveGamePath string) error {

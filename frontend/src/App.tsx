@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CircleX, Download, Edit3, FileText, Folder, FolderOpen, HardDrive, Info, Plus, RefreshCw, Save, Trash2, Upload, Zap} from 'lucide-react';
 import './App.css';
 import {EventsOn, Quit} from '../wailsjs/runtime/runtime';
@@ -7,6 +7,7 @@ import {
     CreateMarkerFile,
     DeleteProfile,
     GetAppVersion,
+    GetLanguage,
     EnsureProfilesFolder,
     ExportProfileBundle,
     GetActiveProfile,
@@ -20,11 +21,13 @@ import {
     OpenExternalURL,
     RenameProfile,
     SaveCurrentProfile,
+    SetLanguage,
     SetSaveGamePath,
     StartInAppUpdate,
     SwitchProfile,
     RunHealthCheck,
 } from '../wailsjs/go/main/App';
+import {createTranslator, type Locale, normalizeLocale, type Translator} from './i18n';
 
 type Profile = {
     name: string;
@@ -88,98 +91,98 @@ function normalizeError(error: unknown): string {
     return String(error);
 }
 
-function toErrorFeedback(error: unknown, fallback: string): ErrorFeedback {
+function toErrorFeedback(error: unknown, fallback: string, t: Translator): ErrorFeedback {
     const detail = normalizeError(error);
     const lowered = detail.toLowerCase();
 
     if (lowered.includes('cannot delete active profile')) {
         return {
-            message: 'You cannot delete the active profile.',
-            hint: 'Switch to a different profile, then delete this one.',
+            message: t('feedback.cannotDelete.message'),
+            hint: t('feedback.cannotDelete.hint'),
         };
     }
 
     if (lowered.includes('root savegame folder is missing') || lowered.includes('root wraps folder is missing')) {
         return {
-            message: 'Current root save folders are missing.',
-            hint: 'Open the game once to regenerate save folders, then try again.',
+            message: t('feedback.rootMissing.message'),
+            hint: t('feedback.rootMissing.hint'),
         };
     }
 
     if (lowered.includes('savegame path') || lowered.includes('path must point to the savegame folder')) {
         return {
-            message: 'SaveGame path is invalid.',
-            hint: 'Set the exact SaveGame directory path in the path panel.',
+            message: t('feedback.pathInvalid.message'),
+            hint: t('feedback.pathInvalid.hint'),
         };
     }
 
     if (lowered.includes('invalid characters') || lowered.includes('profile name is required')) {
         return {
-            message: 'Profile name is invalid.',
-            hint: 'Use letters/numbers and avoid Windows invalid filename characters.',
+            message: t('feedback.profileNameInvalid.message'),
+            hint: t('feedback.profileNameInvalid.hint'),
         };
     }
 
     if (lowered.includes('already exists')) {
         return {
-            message: 'That profile name already exists.',
-            hint: 'Pick another name or rename the existing profile first.',
+            message: t('feedback.profileExists.message'),
+            hint: t('feedback.profileExists.hint'),
         };
     }
 
     if (lowered.includes('profile not found')) {
         return {
-            message: 'Selected profile no longer exists.',
-            hint: 'Refresh profiles and try again.',
+            message: t('feedback.profileNotFound.message'),
+            hint: t('feedback.profileNotFound.hint'),
         };
     }
 
     if (lowered.includes('active profile marker is required to preserve current progress')) {
         return {
-            message: 'Save-first needs an active profile first.',
-            hint: 'Set an active profile from Diagnostics, then retry Start New Save.',
+            message: t('feedback.saveFirstNeedsActive.message'),
+            hint: t('feedback.saveFirstNeedsActive.hint'),
         };
     }
 
     if (lowered.includes('new profile name must differ from active profile when preserving current progress')) {
         return {
-            message: 'Fresh profile name must differ from the active profile.',
-            hint: 'Use a different new profile name before saving current progress.',
+            message: t('feedback.freshNameConflict.message'),
+            hint: t('feedback.freshNameConflict.hint'),
         };
     }
 
     if (lowered.includes('access is denied') || lowered.includes('being used by another process')) {
         return {
-            message: 'Files are currently locked by another process.',
-            hint: 'Close the game and any tools touching save files, then retry.',
+            message: t('feedback.lockedFiles.message'),
+            hint: t('feedback.lockedFiles.hint'),
         };
     }
 
     if (lowered.includes('requires elevation') || lowered.includes('requested operation requires elevation')) {
         return {
-            message: 'Installer requires administrator approval.',
-            hint: 'Approve the Windows UAC prompt to continue in-app update install.',
+            message: t('feedback.elevation.message'),
+            hint: t('feedback.elevation.hint'),
         };
     }
 
     if (lowered.includes('direct update requires a windows installer asset') || lowered.includes('update download url is required')) {
         return {
-            message: 'In-app update is unavailable for this release.',
-            hint: 'Use View notes to open the release page and install manually.',
+            message: t('feedback.inAppUnavailable.message'),
+            hint: t('feedback.inAppUnavailable.hint'),
         };
     }
 
     if (lowered.includes('bundle contains invalid file path')) {
         return {
-            message: 'Bundle file is unsafe or malformed.',
-            hint: 'Use a bundle exported by this app and try again.',
+            message: t('feedback.bundleUnsafe.message'),
+            hint: t('feedback.bundleUnsafe.hint'),
         };
     }
 
     if (lowered.includes('invalid profile layout')) {
         return {
-            message: 'Profile bundle is missing required folders.',
-            hint: 'Bundle must include both savegame and wraps folders.',
+            message: t('feedback.bundleLayout.message'),
+            hint: t('feedback.bundleLayout.hint'),
         };
     }
 
@@ -187,6 +190,53 @@ function toErrorFeedback(error: unknown, fallback: string): ErrorFeedback {
         message: `${fallback}: ${detail}`,
         hint: '',
     };
+}
+
+const healthMessageKeyByText: Record<string, string> = {
+    'SaveGame path is not configured.': 'health.message.savegameNotConfigured',
+    'Directory is missing.': 'health.message.directoryMissing',
+    'Failed to inspect directory.': 'health.message.directoryInspectFailed',
+    'Path exists but is not a directory.': 'health.message.directoryWrongType',
+    'Directory is available.': 'health.message.directoryAvailable',
+    'active_profile.txt is missing.': 'health.message.markerMissing',
+    'Failed to read active_profile.txt.': 'health.message.markerReadFailed',
+    'active_profile.txt is empty.': 'health.message.markerEmpty',
+    'active_profile.txt is valid.': 'health.message.markerValid',
+    'Active profile folder exists.': 'health.message.activeProfileFolderExists',
+    'Active profile marker does not match a folder in Profiles.': 'health.message.activeProfileFolderMissing',
+};
+
+function localizeHealthItemName(name: string, t: Translator): string {
+    return t(`health.name.${name}`);
+}
+
+function localizeHealthMessage(message: string, t: Translator): string {
+    const key = healthMessageKeyByText[message.trim()];
+    if (!key) {
+        return message;
+    }
+
+    return t(key);
+}
+
+const updaterMessageKeyByText: Record<string, string> = {
+    'Validating update package...': 'update.validating',
+    'Update validation failed.': 'update.failed',
+    'Downloading installer update...': 'status.updateInstallerDownload',
+    'Failed to download installer update.': 'update.failed',
+    'Installer downloaded. Launching installer...': 'update.launchingInstaller',
+    'Launching installer... approve the Windows prompt if asked.': 'update.launchingInstaller',
+    'Failed to launch installer.': 'update.failed',
+    'Installer launched. Closing app to finish update...': 'status.installerLaunched',
+};
+
+function localizeUpdaterMessage(message: string, t: Translator): string {
+    const key = updaterMessageKeyByText[message.trim()];
+    if (!key) {
+        return message;
+    }
+
+    return t(key);
 }
 
 function maskWindowsUserPath(path: string): string {
@@ -276,6 +326,8 @@ const toastVisibilityMs = 6400;
 
 function App() {
     type ToastKind = 'success' | 'info' | 'error';
+    const [language, setLanguage] = useState<Locale>('en');
+    const [isLanguageReady, setIsLanguageReady] = useState(false);
     const [saveGamePath, setSaveGamePath] = useState('');
     const [saveGamePathInput, setSaveGamePathInput] = useState('');
     const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -288,7 +340,7 @@ function App() {
     const [importTargetProfile, setImportTargetProfile] = useState('');
     const [importTargetNewName, setImportTargetNewName] = useState('');
     const [importBundlePath, setImportBundlePath] = useState('');
-    const [status, setStatus] = useState('Loading profiles...');
+    const [status, setStatus] = useState(() => createTranslator('en')('status.loadingProfiles'));
     const [recoveryHint, setRecoveryHint] = useState('');
     const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -311,7 +363,7 @@ function App() {
     const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
     const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
     const [isUpdateInstalling, setIsUpdateInstalling] = useState(false);
-    const [updateInstallLabel, setUpdateInstallLabel] = useState('Installing...');
+    const [updateInstallLabel, setUpdateInstallLabel] = useState(() => createTranslator('en')('common.installing'));
     const [updateInstallPercent, setUpdateInstallPercent] = useState<number | null>(null);
     const [updateInstallEta, setUpdateInstallEta] = useState<string | null>(null);
     const [updateInstallSpeed, setUpdateInstallSpeed] = useState<string | null>(null);
@@ -330,6 +382,8 @@ function App() {
         slowSinceMs: 0,
     });
 
+    const t = useMemo(() => createTranslator(language), [language]);
+
     const isModalOpen = isSavePathSetupOpen || switchConfirmProfile !== null || renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen || isFreshConfirmOpen;
 
     const canApplyPath = saveGamePathInput.trim() !== '';
@@ -347,14 +401,14 @@ function App() {
     const hasDiagnosticErrors = healthReport?.items.some((item) => item.severity === 'error') ?? false;
     const hasDiagnosticWarnings = healthReport?.items.some((item) => item.severity === 'warn') ?? false;
     const diagnosticsStatusLabel = isLoading
-        ? 'Working...'
+        ? t('diagnostics.status.working')
         : !healthReport
-            ? 'Not run yet'
+            ? t('diagnostics.status.notRunYet')
             : hasDiagnosticErrors
-                ? 'Needs attention'
+                ? t('diagnostics.status.needsAttention')
                 : hasDiagnosticWarnings
-                    ? 'Ready with warnings'
-                    : 'Ready';
+                    ? t('diagnostics.status.readyWithWarnings')
+                    : t('diagnostics.status.ready');
     const diagnosticsStatusClass = isLoading
         ? 'diag-pending'
         : !healthReport
@@ -369,7 +423,7 @@ function App() {
     const resolvedSaveDestination = saveDestinationMode === 'active' ? activeProfile.trim() : selectedCustomDestination;
     const canSaveCurrent = resolvedSaveDestination !== '';
     const isInAppUpdateEligible = updateInfo?.inAppEligible ?? false;
-    const updatePrimaryLabel = isInAppUpdateEligible ? 'Install update' : 'Update now';
+    const updatePrimaryLabel = isInAppUpdateEligible ? t('update.installButton') : t('update.updateNowButton');
 
     function showToast(message: string, kind: ToastKind = 'success') {
         setToastKind(kind);
@@ -380,7 +434,7 @@ function App() {
     function inferStatusToastKind(message: string): ToastKind {
         const lower = message.trim().toLowerCase();
 
-        const errorPrefixes = ['choose ', 'enter ', 'select ', 'browse and choose ', 'no active profile'];
+        const errorPrefixes = ['choose ', 'enter ', 'select ', 'browse and choose ', 'no active profile', 'elige ', 'ingresa ', 'selecciona ', 'busca y elige ', 'no hay marker'];
         if (errorPrefixes.some((prefix) => lower.startsWith(prefix))) {
             return 'error';
         }
@@ -405,6 +459,15 @@ function App() {
             'cancelled',
             'canceled',
             'cannot execute',
+            'fall',
+            'falla',
+            'no se puede',
+            'no se pudo',
+            'falta',
+            'inval',
+            'no existe',
+            'bloquead',
+            'cancelad',
         ];
         if (errorFragments.some((fragment) => lower.includes(fragment))) {
             return 'error';
@@ -428,12 +491,29 @@ function App() {
             'validating ',
             'launching ',
             'working ',
+            'abriendo ',
+            'ejecutando ',
+            'actualizando ',
+            'descargando ',
+            'aplicando ',
+            'creando ',
+            'completando ',
+            'definiendo ',
+            'cambiando ',
+            'guardando ',
+            'exportando ',
+            'importando ',
+            'renombrando ',
+            'eliminando ',
+            'validando ',
         ];
         if (
             lower.endsWith('...')
             || infoPrefixes.some((prefix) => lower.startsWith(prefix))
             || lower.includes('closing app')
             || lower.includes('confirm path')
+            || lower.includes('cerrando aplicacion')
+            || lower.includes('confirmar ruta')
         ) {
             return 'info';
         }
@@ -441,12 +521,47 @@ function App() {
         return 'success';
     }
 
+    function getLanguageLabel(locale: Locale, translate: Translator): string {
+        return translate(`language.name.${locale}`);
+    }
+
+    async function onChangeLanguage(rawLanguage: string) {
+        const nextLanguage = normalizeLocale(rawLanguage);
+        if (nextLanguage === language) {
+            return;
+        }
+
+        const previousLanguage = language;
+        const nextTranslator = createTranslator(nextLanguage);
+        setLanguage(nextLanguage);
+
+        try {
+            await SetLanguage(nextLanguage);
+            setStatus(nextTranslator('language.updated', {language: getLanguageLabel(nextLanguage, nextTranslator)}));
+            setRecoveryHint('');
+        } catch {
+            setLanguage(previousLanguage);
+            setStatus(t('language.updateFailed'));
+        }
+    }
+
+    async function loadLanguagePreference() {
+        try {
+            const savedLanguage = await GetLanguage();
+            setLanguage(normalizeLocale(savedLanguage));
+        } catch {
+            setLanguage('en');
+        } finally {
+            setIsLanguageReady(true);
+        }
+    }
+
     async function loadData(withRefreshToast = false) {
         try {
             setIsLoading(true);
             const hadActiveBeforeLoad = activeProfile.trim() !== '';
             if (withRefreshToast) {
-                showToast('Refreshing data...', 'info');
+                showToast(t('update.refreshingData'), 'info');
             }
             const [paths, profileItems, health] = await Promise.all([GetPaths(), ListProfiles(), RunHealthCheck()]);
             setSaveGamePath(paths.saveGamePath);
@@ -526,17 +641,17 @@ function App() {
             });
 
             if (requiresSavePathSetup) {
-                setStatus('SaveGame path setup is required.');
-                setRecoveryHint('Confirm your SaveGame path in the startup dialog to continue setup.');
+                setStatus(t('status.setupRequired'));
+                setRecoveryHint(t('status.setupRequiredHint'));
             } else {
-                setStatus('Ready');
+                setStatus(t('common.ready'));
                 setRecoveryHint('');
             }
             if (withRefreshToast) {
-                showToast('Data refreshed.');
+                showToast(t('update.dataRefreshed'));
             }
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Failed to load profiles');
+            const feedback = toErrorFeedback(error, t('error.loadProfiles'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -576,7 +691,7 @@ function App() {
                 setAppVersion(info.currentVersion);
             }
             if (info.updateAvailable) {
-                showToast(`Update available: ${info.latestVersion}`, 'info');
+                showToast(t('update.availableToast', {version: info.latestVersion}), 'info');
             }
         } catch {
             // Ignore update-check failures to avoid noisy startup UX.
@@ -591,9 +706,9 @@ function App() {
 
         try {
             await OpenExternalURL(trimmed);
-            setStatus(`Opening ${label}...`);
+            setStatus(t('update.openingLink', {label}));
         } catch (error) {
-            const feedback = toErrorFeedback(error, `Could not open ${label}`);
+            const feedback = toErrorFeedback(error, t('error.openUpdateLink', {label}), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         }
@@ -602,17 +717,21 @@ function App() {
     function getInAppUpdateUnavailableMessage() {
         const reason = (updateInfo?.inAppReason || '').trim();
         if (reason) {
+            if (reason.toLowerCase().includes('windows installer asset')) {
+                return t('update.inAppUnavailableDefault');
+            }
+
             return reason;
         }
 
-        return 'In-app update is unavailable for this release.';
+        return t('update.inAppUnavailableDefault');
     }
 
     function notifyInAppUpdateUnavailable(customMessage?: string) {
-        const message = (customMessage || getInAppUpdateUnavailableMessage()).trim() || 'In-app update is unavailable for this release.';
+        const message = (customMessage || getInAppUpdateUnavailableMessage()).trim() || t('update.inAppUnavailableDefault');
         lastStatusToastRef.current = message;
         setStatus(message);
-        setRecoveryHint('Use View notes to open the release page and install manually.');
+        setRecoveryHint(t('update.manualInstallHint'));
         showToast(message, 'error');
     }
 
@@ -626,30 +745,31 @@ function App() {
         }
 
         if (!downloadUrl) {
-            notifyInAppUpdateUnavailable('In-app update is unavailable: installer download URL is missing.');
+            notifyInAppUpdateUnavailable(t('update.missingInstallerURL'));
             return;
         }
 
         try {
             setIsLoading(true);
             setIsUpdateInstalling(true);
-            setUpdateInstallLabel('Downloading...');
+            setUpdateInstallLabel(t('update.downloading'));
             setUpdateInstallPercent(0);
             setUpdateInstallEta(null);
             setUpdateInstallSpeed(null);
             setIsSlowNetworkHintVisible(false);
             updateSpeedTrackerRef.current = {lastAtMs: 0, lastBytes: 0, smoothedBps: 0, slowSinceMs: 0};
-            setStatus('Downloading installer update...');
+            setStatus(t('status.updateInstallerDownload'));
             setRecoveryHint('');
 
             const result = await StartInAppUpdate(downloadUrl, releaseUrl) as UpdateInstallResult;
-            const message = result.message?.trim() || 'Installer launched. Closing app to finish update...';
+            const localizedResultMessage = localizeUpdaterMessage((result.message || '').trim(), t);
+            const message = localizedResultMessage || t('status.installerLaunched');
 
             if (!result.started) {
-                const fallbackMessage = message || 'Installer did not start. Retry Update now.';
+                const fallbackMessage = localizedResultMessage || t('status.updateInstallerNotStarted');
                 setStatus(fallbackMessage);
-                setRecoveryHint('In-app installer launch was not confirmed. Retry Update now, or use View notes for manual install.');
-                setUpdateInstallLabel('Installing...');
+                setRecoveryHint(t('status.updateInstallerRetryHint'));
+                setUpdateInstallLabel(t('common.installing'));
                 setUpdateInstallPercent(null);
                 setUpdateInstallEta(null);
                 setUpdateInstallSpeed(null);
@@ -671,13 +791,13 @@ function App() {
             window.setTimeout(() => {
                 setIsLoading(false);
                 setIsUpdateInstalling(false);
-                setRecoveryHint('If the installer did not open, use Update now again or use View notes for manual install.');
+                setRecoveryHint(t('status.updateInstallerNotOpenedHint'));
             }, 7000);
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'In-app update failed');
+            const feedback = toErrorFeedback(error, t('update.failed'), t);
             setStatus(feedback.message);
-            setRecoveryHint(feedback.hint || 'Retry Update now, or use View notes for manual install.');
-            setUpdateInstallLabel('Installing...');
+            setRecoveryHint(feedback.hint || t('status.updateFailedHint'));
+            setUpdateInstallLabel(t('common.installing'));
             setUpdateInstallPercent(null);
             setUpdateInstallEta(null);
             setUpdateInstallSpeed(null);
@@ -705,24 +825,24 @@ function App() {
     async function onRunHealthCheck() {
         try {
             setIsLoading(true);
-            setStatus('Running diagnostics...');
+            setStatus(t('status.runningDiagnostics'));
             setRecoveryHint('');
             const report = await RunHealthCheck();
             setHealthReport(report);
             const hasErrors = report.items.some((item) => item.severity === 'error');
             const hasWarnings = report.items.some((item) => item.severity === 'warn');
             if (hasErrors) {
-                setStatus('Ready');
-                showToast('Diagnostics complete: action needed.', 'info');
+                setStatus(t('common.ready'));
+                showToast(t('diagnostics.toast.actionNeeded'), 'info');
             } else if (hasWarnings) {
-                setStatus('Ready');
-                showToast('Diagnostics complete: ready with warnings.', 'info');
+                setStatus(t('common.ready'));
+                showToast(t('diagnostics.toast.readyWithWarnings'), 'info');
             } else {
-                setStatus('Ready');
-                showToast('Diagnostics complete: setup looks ready.', 'info');
+                setStatus(t('common.ready'));
+                showToast(t('diagnostics.toast.ready'), 'info');
             }
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Diagnostics failed');
+            const feedback = toErrorFeedback(error, t('error.diagnostics'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -733,7 +853,7 @@ function App() {
     async function onApplyPath() {
         const trimmed = saveGamePathInput.trim();
         if (!trimmed) {
-            const message = 'SaveGame path cannot be empty.';
+            const message = t('status.pathEmpty');
             lastStatusToastRef.current = message;
             setStatus(message);
             setRecoveryHint('');
@@ -743,7 +863,7 @@ function App() {
 
         const normalized = trimmed.replace(/[\\/]+$/, '');
         if (!/[\\/]Need for speed heat[\\/]SaveGame$/i.test(normalized)) {
-            const message = 'Path must point to Need for speed heat\\SaveGame.';
+            const message = t('status.pathInvalidPattern');
             lastStatusToastRef.current = message;
             setStatus(message);
             setRecoveryHint('');
@@ -753,13 +873,13 @@ function App() {
 
         try {
             setIsLoading(true);
-            setStatus('Applying SaveGame path...');
+            setStatus(t('status.applyingSaveGamePath'));
             setRecoveryHint('');
             await SetSaveGamePath(trimmed);
             await loadData();
-            setStatus('SaveGame path updated and refreshed.');
+            setStatus(t('status.saveGamePathUpdated'));
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Path update failed');
+            const feedback = toErrorFeedback(error, t('error.pathUpdateFailed'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -775,13 +895,13 @@ function App() {
             }
 
             setSaveGamePathInput(selectedPath);
-            setStatus('SaveGame path selected. Confirm path to apply.');
+            setStatus(t('status.saveGamePathSelected'));
             setRecoveryHint('');
             if (openConfirmModal) {
                 setIsSavePathSetupOpen(true);
             }
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Could not open folder picker');
+            const feedback = toErrorFeedback(error, t('error.openFolderPicker'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         }
@@ -790,16 +910,16 @@ function App() {
     async function onEnsureProfilesFolder(closeModalAfter = false) {
         try {
             setIsLoading(true);
-            setStatus('Creating Profiles folder...');
+            setStatus(t('status.creatingProfilesFolder'));
             setRecoveryHint('');
             await EnsureProfilesFolder();
             await loadData();
-            setStatus('Profiles folder is ready.');
+            setStatus(t('status.profilesFolderReady'));
             if (closeModalAfter) {
                 setDiagnosticsModal(null);
             }
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Failed to create Profiles folder');
+            const feedback = toErrorFeedback(error, t('error.createProfilesFolder'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -810,7 +930,7 @@ function App() {
     async function onCompleteSetup() {
         try {
             setIsLoading(true);
-            setStatus('Completing setup...');
+            setStatus(t('status.completingSetup'));
             setRecoveryHint('');
 
             await EnsureProfilesFolder();
@@ -819,17 +939,17 @@ function App() {
 
             if (profileItems.length === 0) {
                 setDiagnosticsModal('firstSave');
-                setStatus('Profiles folder is ready. Save current progress to create your first profile.');
+                setStatus(t('status.readyCreateFirstProfile'));
                 return;
             }
 
             if (profileItems.length === 1) {
                 const singleProfileName = profileItems[0].name;
-                setStatus(`Setting ${singleProfileName} as active profile...`);
+                setStatus(t('status.settingActiveProfile', {name: singleProfileName}));
                 await CreateMarkerFile(singleProfileName);
                 setActiveProfile(singleProfileName);
                 await loadData();
-                setStatus(`Setup complete. Active profile set to ${singleProfileName}.`);
+                setStatus(t('status.setupComplete', {name: singleProfileName}));
                 return;
             }
 
@@ -841,9 +961,9 @@ function App() {
                 return profileItems[0]?.name ?? '';
             });
             setDiagnosticsModal('marker');
-            setStatus('Profiles folder is ready. Choose which profile should be active.');
+            setStatus(t('status.readyChooseActive'));
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Complete setup failed');
+            const feedback = toErrorFeedback(error, t('error.completeSetup'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -854,21 +974,21 @@ function App() {
     async function onCreateMarkerFile(profileName?: string) {
         const selectedProfile = (profileName ?? markerDialogProfile).trim();
         if (!selectedProfile) {
-            setStatus('Select a profile first to create active_profile.txt.');
+            setStatus(t('status.selectProfileToCreateMarker'));
             return;
         }
 
         try {
             setIsLoading(true);
-            setStatus(`Creating marker for ${selectedProfile}...`);
+            setStatus(t('status.creatingMarker', {name: selectedProfile}));
             setRecoveryHint('');
             await CreateMarkerFile(selectedProfile);
             setActiveProfile(selectedProfile);
             await loadData();
-            setStatus(`active_profile.txt created for ${selectedProfile}.`);
+            setStatus(t('status.markerCreated', {name: selectedProfile}));
             setDiagnosticsModal(null);
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Failed to create marker file');
+            const feedback = toErrorFeedback(error, t('error.createMarker'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -880,15 +1000,15 @@ function App() {
         const previousActive = activeProfile.trim();
 
         try {
-            setStatus(`Switching to ${profileName}...`);
+            setStatus(t('status.switchingProfile', {name: profileName}));
             setIsLoading(true);
             setRecoveryHint('');
             await SwitchProfile(profileName);
             setActiveProfile(profileName);
             setSelectedProfileName(profileName);
-            setStatus(`Active profile: ${profileName}`);
+            setStatus(t('status.activeProfileNow', {name: profileName}));
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Switch failed');
+            const feedback = toErrorFeedback(error, t('error.switch'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
             setSelectedProfileName(previousActive);
@@ -916,7 +1036,7 @@ function App() {
     async function onPrepareFresh() {
         const name = freshProfileName.trim();
         if (!name) {
-            setStatus('Choose a profile name before preparing a fresh save.');
+            setStatus(t('status.chooseFreshName'));
             return;
         }
 
@@ -932,7 +1052,7 @@ function App() {
     async function onConfirmPrepareFresh(preserveCurrent: boolean) {
         const name = freshConfirmProfileName.trim();
         if (!name) {
-            setStatus('Choose a profile name before preparing a fresh save.');
+            setStatus(t('status.chooseFreshName'));
             closeFreshConfirmModal();
             return;
         }
@@ -941,22 +1061,22 @@ function App() {
         const isSameAsActive = currentActive.toLowerCase() === name.toLowerCase();
 
         if (preserveCurrent && !currentActive) {
-            setStatus('Save first requires an active profile. Set one from Diagnostics first.');
-            setRecoveryHint('Open Diagnostics and use Set active profile, then retry Start New Save.');
+            setStatus(t('status.saveFirstNeedsActive'));
+            setRecoveryHint(t('status.saveFirstNeedsActiveHint'));
             return;
         }
 
         if (preserveCurrent && isSameAsActive) {
-            setStatus('Fresh profile name must differ from the current active profile when saving first.');
-            setRecoveryHint('Choose a different name for the new profile, then retry.');
+            setStatus(t('status.freshNameMustDiffer'));
+            setRecoveryHint(t('status.freshNameMustDifferHint'));
             return;
         }
 
         try {
             setIsLoading(true);
             setStatus(preserveCurrent
-                ? `Saving current progress into ${currentActive} and preparing fresh profile ${name}...`
-                : `Starting new save ${name} without saving current progress...`);
+                ? t('status.newSaveSavingFirst', {active: currentActive, fresh: name})
+                : t('status.newSaveSkipping', {fresh: name}));
             setRecoveryHint('');
             if (preserveCurrent) {
                 await PrepareFreshProfile(name);
@@ -969,10 +1089,10 @@ function App() {
             setActiveProfile(name);
             await loadData();
             setStatus(preserveCurrent
-                ? `Current progress saved into ${currentActive}. Fresh profile ${name} is now active.`
-                : `Started new save ${name} without saving current root progress. Active profile updated.`);
+                ? t('status.newSaveSavedFirst', {active: currentActive, fresh: name})
+                : t('status.newSaveSkipped', {fresh: name}));
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Create profile failed');
+            const feedback = toErrorFeedback(error, t('error.createProfile'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -983,9 +1103,9 @@ function App() {
     async function onSaveCurrent() {
         if (!canSaveCurrent) {
             if (saveDestinationMode === 'active') {
-                setStatus('No active profile marker found. Choose another destination first.');
+                setStatus(t('status.noActiveMarkerDestination'));
             } else {
-                setStatus('Choose or enter a destination profile first.');
+                setStatus(t('status.chooseDestinationFirst'));
             }
             return;
         }
@@ -996,7 +1116,7 @@ function App() {
 
         try {
             setIsLoading(true);
-            setStatus(`Saving current root data into ${target}...`);
+            setStatus(t('status.savingCurrentInto', {name: target}));
             setRecoveryHint('');
             await SaveCurrentProfile(requested);
             if (shouldAutoSetActive) {
@@ -1007,9 +1127,11 @@ function App() {
                 setSaveDestinationNewName('');
             }
             await loadData();
-            setStatus(shouldAutoSetActive ? `Saved current progress to ${target} and set it as active.` : `Saved current progress to ${target}.`);
+            setStatus(shouldAutoSetActive
+                ? t('status.savedCurrentAndSetActive', {name: target})
+                : t('status.savedCurrent', {name: target}));
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Save current failed');
+            const feedback = toErrorFeedback(error, t('error.saveCurrent'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -1020,7 +1142,7 @@ function App() {
     async function onExportBundle() {
         const profileName = exportProfileName.trim();
         if (!profileName) {
-            setStatus('Choose a profile to export first.');
+            setStatus(t('status.chooseProfileToExport'));
             return;
         }
 
@@ -1028,13 +1150,13 @@ function App() {
 
         try {
             setIsLoading(true);
-            setStatus(`Exporting ${profileName} bundle...`);
+            setStatus(t('status.exportingBundle', {name: profileName}));
             setRecoveryHint('');
             await ExportProfileBundle(profileName, bundlePath);
-            setStatus(`Bundle exported: ${bundlePath}`);
+            setStatus(t('status.bundleExported', {path: bundlePath}));
             setIsExportModalOpen(false);
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Bundle export failed');
+            const feedback = toErrorFeedback(error, t('error.exportBundle'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -1046,25 +1168,25 @@ function App() {
         const profileName = resolvedImportTarget;
         const bundlePath = importBundlePath.trim();
         if (!profileName) {
-            setStatus(importTargetProfile === NEW_PROFILE_OPTION ? 'Enter a new profile name for import.' : 'Choose destination profile first.');
+            setStatus(importTargetProfile === NEW_PROFILE_OPTION ? t('status.enterImportProfileName') : t('status.chooseImportDestination'));
             return;
         }
 
         if (!bundlePath) {
-            setStatus('Browse and choose a .zip bundle to import first.');
+            setStatus(t('status.chooseBundleFirst'));
             return;
         }
 
         try {
             setIsLoading(true);
-            setStatus(`Importing bundle into ${profileName}...`);
+            setStatus(t('status.importingBundle', {name: profileName}));
             setRecoveryHint('');
             await ImportProfileBundle(profileName, bundlePath);
             await loadData();
-            setStatus(`Bundle imported into profile ${profileName}.`);
+            setStatus(t('status.bundleImported', {name: profileName}));
             setIsImportModalOpen(false);
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Bundle import failed');
+            const feedback = toErrorFeedback(error, t('error.importBundle'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -1079,7 +1201,7 @@ function App() {
                 setImportBundlePath(selected);
             }
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Failed to open file picker');
+            const feedback = toErrorFeedback(error, t('error.openFilePicker'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         }
@@ -1108,14 +1230,14 @@ function App() {
 
         try {
             setIsLoading(true);
-            setStatus(`Renaming ${renameTarget} to ${nextName}...`);
+            setStatus(t('status.renamingProfile', {oldName: renameTarget, newName: nextName}));
             setRecoveryHint('');
             await RenameProfile(renameTarget, nextName);
             await loadData();
-            setStatus(`Profile renamed to ${nextName}.`);
+            setStatus(t('status.profileRenamed', {name: nextName}));
             closeRenameModal();
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Rename failed');
+            const feedback = toErrorFeedback(error, t('error.rename'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -1169,13 +1291,13 @@ function App() {
     async function onSaveCurrentFromModal() {
         const profileName = firstSaveProfileName.trim();
         if (!profileName) {
-            setStatus('Enter a profile name before saving current progress.');
+            setStatus(t('status.enterNameBeforeSavingCurrent'));
             return;
         }
 
         try {
             setIsLoading(true);
-            setStatus(`Saving current root data into ${profileName}...`);
+            setStatus(t('status.savingCurrentInto', {name: profileName}));
             setRecoveryHint('');
             await SaveCurrentProfile(profileName);
 
@@ -1189,10 +1311,10 @@ function App() {
             setDiagnosticsModal(null);
             setFirstSaveProfileName('');
             setStatus(shouldAutoSetActive
-                ? `Saved current progress to ${profileName} and set it as active.`
-                : `Saved current progress to ${profileName}.`);
+                ? t('status.savedCurrentAndSetActive', {name: profileName})
+                : t('status.savedCurrent', {name: profileName}));
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Save current failed');
+            const feedback = toErrorFeedback(error, t('error.saveCurrent'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -1248,14 +1370,14 @@ function App() {
 
         try {
             setIsLoading(true);
-            setStatus(`Deleting ${deleteTarget}...`);
+            setStatus(t('status.deletingProfile', {name: deleteTarget}));
             setRecoveryHint('');
             await DeleteProfile(deleteTarget);
             await loadData();
-            setStatus(`Profile deleted: ${deleteTarget}.`);
+            setStatus(t('status.profileDeleted', {name: deleteTarget}));
             closeDeleteModal();
         } catch (error) {
-            const feedback = toErrorFeedback(error, 'Delete failed');
+            const feedback = toErrorFeedback(error, t('error.delete'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
         } finally {
@@ -1264,14 +1386,22 @@ function App() {
     }
 
     useEffect(() => {
+        void loadLanguagePreference();
+    }, []);
+
+    useEffect(() => {
+        if (!isLanguageReady) {
+            return;
+        }
+
         void loadData();
         void checkForUpdates();
-    }, []);
+    }, [isLanguageReady]);
 
     useEffect(() => {
         const unsubscribe = EventsOn(updateProgressEventName, (payload: UpdateProgressEvent) => {
             const stage = (payload?.stage || '').trim().toLowerCase();
-            const message = (payload?.message || '').trim();
+            const message = localizeUpdaterMessage((payload?.message || '').trim(), t);
             const downloadedBytes = Math.max(0, Number(payload?.downloadedBytes || 0));
             const totalBytes = Math.max(0, Number(payload?.totalBytes || 0));
             const rawPercent = Number(payload?.percent);
@@ -1289,9 +1419,10 @@ function App() {
                 setRecoveryHint('');
 
                 if (stage === 'downloading') {
+                    const downloadingLabel = t('update.downloading').replace('...', '');
                     const bytesLabel = totalBytes > 0
-                        ? `Downloading ${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}`
-                        : `Downloading ${formatBytes(downloadedBytes)}`;
+                        ? `${downloadingLabel} ${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}`
+                        : `${downloadingLabel} ${formatBytes(downloadedBytes)}`;
                     setUpdateInstallLabel(bytesLabel);
                     setUpdateInstallPercent(normalizedPercent);
 
@@ -1343,14 +1474,14 @@ function App() {
                         updateSpeedTrackerRef.current.slowSinceMs = 0;
                     }
                 } else if (stage === 'validating') {
-                    setUpdateInstallLabel('Validating update...');
+                    setUpdateInstallLabel(t('update.validating'));
                     setUpdateInstallPercent(null);
                     setUpdateInstallEta(null);
                     setUpdateInstallSpeed(null);
                     setIsSlowNetworkHintVisible(false);
                     updateSpeedTrackerRef.current = {lastAtMs: 0, lastBytes: 0, smoothedBps: 0, slowSinceMs: 0};
                 } else if (stage === 'downloaded' || stage === 'launching') {
-                    setUpdateInstallLabel('Launching installer...');
+                    setUpdateInstallLabel(t('update.launchingInstaller'));
                     setUpdateInstallPercent(100);
                     setUpdateInstallEta(null);
                     setUpdateInstallSpeed(null);
@@ -1361,7 +1492,7 @@ function App() {
             }
 
             if (stage === 'launched') {
-                setUpdateInstallLabel('Closing app...');
+                setUpdateInstallLabel(t('update.closingApp'));
                 setUpdateInstallPercent(100);
                 setUpdateInstallEta(null);
                 setUpdateInstallSpeed(null);
@@ -1371,7 +1502,7 @@ function App() {
             if (stage === 'failed') {
                 setIsLoading(false);
                 setIsUpdateInstalling(false);
-                setUpdateInstallLabel('Installing...');
+                setUpdateInstallLabel(t('common.installing'));
                 setUpdateInstallPercent(null);
                 setUpdateInstallEta(null);
                 setUpdateInstallSpeed(null);
@@ -1383,7 +1514,7 @@ function App() {
         return () => {
             unsubscribe();
         };
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         if (!isModalOpen) {
@@ -1409,7 +1540,7 @@ function App() {
 
     useEffect(() => {
         const message = status.trim();
-        if (!message || message.toLowerCase() === 'ready') {
+        if (!message || message.toLowerCase() === t('common.ready').toLowerCase()) {
             return;
         }
 
@@ -1419,7 +1550,7 @@ function App() {
 
         lastStatusToastRef.current = message;
         showToast(message, inferStatusToastKind(message));
-    }, [status]);
+    }, [status, t]);
 
     useEffect(() => {
         const hint = recoveryHint.trim();
@@ -1432,18 +1563,18 @@ function App() {
         }
 
         lastRecoveryToastRef.current = hint;
-        showToast(`Tip: ${hint}`, 'info');
-    }, [recoveryHint]);
+        showToast(t('toast.tipPrefix', {hint}), 'info');
+    }, [recoveryHint, t]);
 
     useEffect(() => {
-        if (status.trim().toLowerCase() !== 'ready') {
+        if (status.trim().toLowerCase() !== t('common.ready').toLowerCase()) {
             return;
         }
 
-        if (toastMessage.toLowerCase().includes('loading profiles')) {
+        if (toastMessage.toLowerCase().includes(t('status.loadingProfiles').toLowerCase())) {
             setToastMessage('');
         }
-    }, [status, toastMessage]);
+    }, [status, toastMessage, t]);
 
     useEffect(() => {
         if (!toastMessage) {
@@ -1470,20 +1601,20 @@ function App() {
     return (
         <div className={`app-shell${hasQuickActions ? ' quick-actions-focus' : ''}`}>
             <header className="hero">
-                <p className="eyebrow"><Zap size={11} strokeWidth={2.3} /> Need for Speed Heat</p>
-                <h1>Heat Save Manager</h1>
+                <p className="eyebrow"><Zap size={11} strokeWidth={2.3} /> {t('hero.eyebrow')}</p>
+                <h1>{t('hero.title')}</h1>
                 <div className="hero-actions">
-                    <p className="current-profile">Current Profile: <strong>{activeProfile || 'None selected'}</strong></p>
+                    <p className="current-profile">{t('hero.currentProfile')}: <strong>{activeProfile || t('common.noneSelected')}</strong></p>
                     <button className="top-refresh-btn" onClick={() => void loadData(true)} disabled={isLoading || isModalOpen}>
-                        <RefreshCw size={13} strokeWidth={2.2} className={isLoading ? 'spin' : ''} /> Refresh
+                        <RefreshCw size={13} strokeWidth={2.2} className={isLoading ? 'spin' : ''} /> {t('hero.refresh')}
                     </button>
                 </div>
                 <p className={`status ${diagnosticsStatusClass}`}><span className="status-dot" aria-hidden="true" /> {diagnosticsStatusLabel}</p>
                 {updateInfo?.updateAvailable && !isUpdateDismissed && (
                     <div className="update-banner" role="status" aria-live="polite">
                         <div className="update-banner-copy">
-                            <strong>New version {updateInfo.latestVersion} is available.</strong>
-                            <span className="update-current">You&apos;re on {appVersion || updateInfo.currentVersion || 'unknown'}.</span>
+                            <strong>{t('update.newVersionAvailable', {version: updateInfo.latestVersion})}</strong>
+                            <span className="update-current">{t('update.currentVersion', {version: appVersion || updateInfo.currentVersion || t('update.unknownVersion')})}</span>
                             {!isInAppUpdateEligible && (
                                 <span className="update-progress-hint">{getInAppUpdateUnavailableMessage()}</span>
                             )}
@@ -1504,7 +1635,7 @@ function App() {
                                     <div
                                         className={`update-progress-track${updateInstallPercent === null ? ' is-indeterminate' : ''}`}
                                         role="progressbar"
-                                        aria-label="Update installation progress"
+                                        aria-label={t('update.progressAriaLabel')}
                                         aria-valuemin={0}
                                         aria-valuemax={100}
                                         aria-valuenow={updateInstallPercent ?? undefined}
@@ -1516,28 +1647,28 @@ function App() {
                                         />
                                     </div>
                                     {isSlowNetworkHintVisible && (
-                                        <span className="update-progress-hint">Slow network detected. Download may take longer than usual.</span>
+                                        <span className="update-progress-hint">{t('update.slowNetwork')}</span>
                                     )}
                                 </div>
                             )}
                         </div>
                         <div className="update-banner-actions">
                             <button className="switch-btn secondary" onClick={() => setIsUpdateDismissed(true)} disabled={isLoading || isModalOpen}>
-                                Later
+                                {t('common.later')}
                             </button>
                             <button
                                 className="switch-btn secondary"
-                                onClick={() => void onOpenUpdateLink(updateInfo.releaseUrl || updateInfo.downloadUrl, 'release page')}
+                                onClick={() => void onOpenUpdateLink(updateInfo.releaseUrl || updateInfo.downloadUrl, t('update.openReleasePage'))}
                                 disabled={isLoading || isModalOpen || !(updateInfo.releaseUrl || updateInfo.downloadUrl)}
                             >
-                                View notes
+                                {t('common.viewNotes')}
                             </button>
                             <button
                                 className="action-btn"
                                 onClick={() => void onUpdatePrimaryAction()}
                                 disabled={isLoading || isUpdateInstalling || isModalOpen}
                             >
-                                {isUpdateInstalling ? 'Installing...' : updatePrimaryLabel}
+                                {isUpdateInstalling ? t('common.installing') : updatePrimaryLabel}
                             </button>
                         </div>
                     </div>
@@ -1547,42 +1678,42 @@ function App() {
             <main className="dashboard workspace-layout">
                 <section className="panel diagnostics-panel side-panel">
                     <div className="panel-header-row diag-header">
-                        <h2>Diagnostics</h2>
+                        <h2>{t('diagnostics.title')}</h2>
                         <span className={`diag-pill ${diagnosticsStatusClass}`}>
                             <span className="diag-pill-dot" aria-hidden="true" />
                             {diagnosticsStatusLabel}
                         </span>
                     </div>
-                    <p className="diag-last-run">Last run: {healthReport?.checkedAt ? new Date(healthReport.checkedAt).toLocaleString() : 'Not run yet'}</p>
+                    <p className="diag-last-run">{t('diagnostics.lastRun', {value: healthReport?.checkedAt ? new Date(healthReport.checkedAt).toLocaleString() : t('diagnostics.lastRunNotRunYet')})}</p>
                     <button className="diag-run-btn" onClick={() => void onRunHealthCheck()} disabled={isLoading || isModalOpen}>
                         <span className="diag-run-glow" aria-hidden="true" />
                         <span className="diag-run-label">
-                            {isLoading ? 'Running...' : (<><Zap size={13} strokeWidth={2.15} /> Run Diagnostics</>)}
+                            {isLoading ? t('diagnostics.running') : (<><Zap size={13} strokeWidth={2.15} /> {t('diagnostics.run')}</>)}
                         </span>
                     </button>
                     {(needsSaveGamePathFix || needsProfilesFolderFix || needsMarkerFileFix) && (
                         <div className="diag-actions">
-                            <h3>Quick Actions</h3>
-                            <p className="diag-callout">Action required: use a quick action below to continue setup.</p>
+                            <h3>{t('diagnostics.quickActions')}</h3>
+                            <p className="diag-callout">{t('diagnostics.callout')}</p>
                             {needsSaveGamePathFix && (
                                 <button className="action-btn secondary attention" onClick={() => setIsSavePathSetupOpen(true)} disabled={isLoading || isModalOpen}>
-                                    Set SaveGame path
+                                    {t('diagnostics.setSaveGamePath')}
                                 </button>
                             )}
                             {needsCombinedSetupFix ? (
                                 <button className="action-btn secondary attention" onClick={() => void onCompleteSetup()} disabled={isLoading || isModalOpen}>
-                                    Complete setup
+                                    {t('diagnostics.completeSetup')}
                                 </button>
                             ) : (
                                 <>
                                     {needsProfilesFolderFix && (
                                         <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('profiles')} disabled={isLoading || isModalOpen}>
-                                            Create Profiles folder
+                                            {t('diagnostics.createProfilesFolder')}
                                         </button>
                                     )}
                                     {needsMarkerFileFix && (
                                         <button className="action-btn secondary attention" onClick={() => openDiagnosticsModal('marker')} disabled={isLoading || isModalOpen}>
-                                            Set active profile
+                                            {t('diagnostics.setActiveProfile')}
                                         </button>
                                     )}
                                 </>
@@ -1598,9 +1729,9 @@ function App() {
                                     </span>
                                     <div className="health-title">
                                         <span className="health-item-icon" aria-hidden="true">{getDiagnosticItemIcon(item.name)}</span>
-                                        <strong>{item.name.replaceAll('_', ' ')}</strong>
+                                        <strong>{localizeHealthItemName(item.name, t)}</strong>
                                     </div>
-                                    <span className="health-message">{item.message}</span>
+                                    <span className="health-message">{localizeHealthMessage(item.message, t)}</span>
                                 </li>
                             ))}
                         </ul>
@@ -1611,8 +1742,8 @@ function App() {
                 <section className="panel profile-section-card">
                     <div className="panel-block">
                         <div className="panel-header-row">
-                            <h2>Profiles</h2>
-                            <span className="field-hint">Active: <strong>{activeProfile || 'None selected'}</strong></span>
+                            <h2>{t('profiles.title')}</h2>
+                            <span className="field-hint">{t('profiles.active')}: <strong>{activeProfile || t('common.noneSelected')}</strong></span>
                         </div>
 
                         {profiles.length > 0 ? (
@@ -1634,10 +1765,10 @@ function App() {
                                             }
                                         }}
                                         disabled={isLoading || isModalOpen}
-                                        aria-label="Select profile"
+                                        aria-label={t('profiles.selectAria')}
                                     >
                                         <option value="" disabled>
-                                            {activeProfile ? 'Select profile' : 'No active profile selected'}
+                                            {activeProfile ? t('profiles.selectProfile') : t('profiles.noActiveProfileSelected')}
                                         </option>
                                         {profiles.map((profile) => (
                                             <option key={profile.name} value={profile.name}>
@@ -1647,7 +1778,7 @@ function App() {
                                     </select>
                                     {selectedProfileName && activeProfile && selectedProfileName === activeProfile && (
                                         <span className="profile-active-tag" style={{left: `calc(0.92rem + ${Math.min(selectedProfileName.length + 2, 16)}ch)`}}>
-                                            ACTIVE
+                                            {t('profiles.activeTag')}
                                         </span>
                                     )}
                                 </div>
@@ -1655,25 +1786,25 @@ function App() {
                                     className="switch-btn secondary"
                                     onClick={() => openRenameModal(selectedProfileName)}
                                     disabled={isLoading || isModalOpen || !selectedProfileName}
-                                    aria-label="Rename selected profile"
+                                    aria-label={t('profiles.renameSelectedAria')}
                                 >
                                     <Edit3 size={13} strokeWidth={2.1} />
-                                    Rename
+                                    {t('common.rename')}
                                 </button>
                                 <button
                                     className="switch-btn danger"
                                     onClick={() => openDeleteModal(selectedProfileName)}
                                     disabled={isLoading || isModalOpen || !selectedProfileName || selectedProfileName === activeProfile}
-                                    aria-label="Delete selected profile"
+                                    aria-label={t('profiles.deleteSelectedAria')}
                                 >
                                     <Trash2 size={13} strokeWidth={2.1} />
-                                    Delete
+                                    {t('common.delete')}
                                 </button>
                             </div>
                         ) : (
                             <div>
-                                <p className="empty">No profiles found in the Profiles folder.</p>
-                                <p className="field-hint">Create one with Start New Save to begin.</p>
+                                <p className="empty">{t('profiles.empty')}</p>
+                                <p className="field-hint">{t('profiles.emptyHint')}</p>
                             </div>
                         )}
                     </div>
@@ -1681,23 +1812,23 @@ function App() {
                 </section>
 
                 <section className="panel save-actions-panel" ref={saveActionsRef}>
-                    <h2>Save Actions</h2>
+                    <h2>{t('saveActions.title')}</h2>
                     <div className="save-actions-grid">
                         <div className="setup-group save-card start-save-card">
                             <div className="save-card-head">
                                 <span className="save-card-icon" aria-hidden="true"><Plus size={14} strokeWidth={2.2} /></span>
-                                <label className="field-label" htmlFor="fresh-profile-input">Start New Save</label>
+                                <label className="field-label" htmlFor="fresh-profile-input">{t('saveActions.startNewTitle')}</label>
                             </div>
                             <div className="field-row">
                                 <input
                                     id="fresh-profile-input"
                                     value={freshProfileName}
                                     onChange={(event) => setFreshProfileName(event.target.value)}
-                                    placeholder="New profile name"
+                                    placeholder={t('saveActions.newProfilePlaceholder')}
                                     disabled={isLoading || isModalOpen}
                                 />
                                 <button className="action-btn" onClick={() => void onPrepareFresh()} disabled={isLoading || isModalOpen || !canPrepareFresh}>
-                                    <Plus size={14} strokeWidth={2.2} /> Start New Save
+                                    <Plus size={14} strokeWidth={2.2} /> {t('saveActions.startNewButton')}
                                 </button>
                             </div>
                         </div>
@@ -1705,9 +1836,9 @@ function App() {
                         <div className="setup-group save-current-group save-card save-progress-card">
                             <div className="save-card-head">
                                 <span className="save-card-icon" aria-hidden="true"><Save size={13} strokeWidth={2.2} /></span>
-                                <label className="field-label" htmlFor="save-profile-input">Save Current Progress</label>
+                                <label className="field-label" htmlFor="save-profile-input">{t('saveActions.saveCurrentTitle')}</label>
                             </div>
-                            <div className="save-mode-row" role="radiogroup" aria-label="Save current destination mode">
+                            <div className="save-mode-row" role="radiogroup" aria-label={t('saveActions.destinationModeAria')}>
                                 <label className="save-mode-option">
                                     <input
                                         type="radio"
@@ -1715,7 +1846,7 @@ function App() {
                                         onChange={() => setSaveDestinationMode('active')}
                                         disabled={isLoading || isModalOpen || !hasActiveDestination}
                                     />
-                                    <span className={!hasActiveDestination ? 'disabled-option' : ''}>{hasActiveDestination ? `Use active (${activeProfile})` : 'Use active (not available)'}</span>
+                                    <span className={!hasActiveDestination ? 'disabled-option' : ''}>{hasActiveDestination ? t('saveActions.useActive', {name: activeProfile}) : t('saveActions.useActiveUnavailable')}</span>
                                 </label>
                                 <label className="save-mode-option">
                                     <input
@@ -1724,7 +1855,7 @@ function App() {
                                         onChange={() => setSaveDestinationMode('custom')}
                                         disabled={isLoading || isModalOpen}
                                     />
-                                    <span>Choose destination</span>
+                                    <span>{t('saveActions.chooseDestination')}</span>
                                 </label>
                             </div>
 
@@ -1738,16 +1869,16 @@ function App() {
                                     >
                                         {profiles.map((profile) => (
                                             <option key={profile.name} value={profile.name}>
-                                                {profile.name}{profile.name === activeProfile ? ' (active)' : ''}
+                                                {profile.name}{profile.name === activeProfile ? t('saveActions.activeSuffix') : ''}
                                             </option>
                                         ))}
-                                        <option value={NEW_PROFILE_OPTION}>Create new profile...</option>
+                                        <option value={NEW_PROFILE_OPTION}>{t('saveActions.createNewProfileOption')}</option>
                                     </select>
                                     {saveDestinationProfile === NEW_PROFILE_OPTION && (
                                         <input
                                             value={saveDestinationNewName}
                                             onChange={(event) => setSaveDestinationNewName(event.target.value)}
-                                            placeholder="New profile name"
+                                            placeholder={t('saveActions.newProfilePlaceholder')}
                                             disabled={isLoading || isModalOpen}
                                         />
                                     )}
@@ -1755,14 +1886,14 @@ function App() {
                             )}
 
                             <p className="field-hint">
-                                Destination: <strong>{resolvedSaveDestination || 'Not selected'}</strong>. This copies current <span className="path-token">savegame</span> + <span className="path-token">wraps</span> into that profile.
+                                {t('saveActions.destinationSummary', {name: resolvedSaveDestination || t('saveActions.destinationNotSelected')})}
                             </p>
                             {!hasActiveDestination && saveDestinationMode === 'active' && (
-                                <p className="field-hint">No active marker detected yet. Use "Choose destination" or create `active_profile.txt` from Diagnostics.</p>
+                                <p className="field-hint">{t('saveActions.noActiveHint')}</p>
                             )}
                             <div className="field-row">
                                 <button className="action-btn secondary" onClick={() => void onSaveCurrent()} disabled={isLoading || isModalOpen || !canSaveCurrent}>
-                                    <Save size={15} strokeWidth={2.2} /> Save Progress
+                                    <Save size={15} strokeWidth={2.2} /> {t('saveActions.saveProgressButton')}
                                 </button>
                             </div>
                         </div>
@@ -1770,34 +1901,50 @@ function App() {
                 </section>
 
                 <section className="panel save-setup-panel">
-                    <h2>Save Setup</h2>
+                    <h2>{t('saveSetup.title')}</h2>
                     <div className="setup-group save-setup-inner-card">
                         <label className="field-label savegame-path-label" htmlFor="savegame-path-input">
                             <FolderOpen size={13} strokeWidth={2} />
-                            <span>SaveGame Path</span>
+                            <span>{t('saveSetup.pathLabel')}</span>
                         </label>
-                        <p className="path">{saveGamePath ? maskWindowsUserPath(saveGamePath) : 'Not set'}</p>
+                        <p className="path">{saveGamePath ? maskWindowsUserPath(saveGamePath) : t('common.notSet')}</p>
                         <div className="field-row savegame-path-row">
                             <input
                                 id="savegame-path-input"
                                 value={saveGamePathInput}
                                 onChange={(event) => setSaveGamePathInput(event.target.value)}
-                                placeholder="C:\\Users\\<user>\\Documents\\Need for speed heat\\SaveGame"
+                                placeholder={t('saveSetup.placeholder')}
                                 disabled={isLoading || isModalOpen}
                             />
                             <button className="action-btn secondary" onClick={() => void onBrowseSaveGamePath(true)} disabled={isLoading || isModalOpen}>
-                                Browse...
+                                {t('common.browse')}
                             </button>
                         </div>
-                        <p className="field-hint">Path must point to <span className="path-token">Need for speed heat\SaveGame</span>.</p>
+                        <p className="field-hint">{t('saveSetup.pathHint')}</p>
+                    </div>
+                    <div className="setup-group preferences-inner-card">
+                        <label className="field-label" htmlFor="language-select">{t('saveSetup.preferencesTitle')}</label>
+                        <div className="field-row language-row">
+                            <span className="field-label language-label">{t('language.label')}</span>
+                            <select
+                                id="language-select"
+                                value={language}
+                                onChange={(event) => void onChangeLanguage(event.target.value)}
+                                disabled={isLoading || isModalOpen}
+                            >
+                                <option value="en">{getLanguageLabel('en', t)}</option>
+                                <option value="es">{getLanguageLabel('es', t)}</option>
+                            </select>
+                        </div>
+                        <p className="field-hint">{t('language.hint')}</p>
                     </div>
                 </section>
 
                 <section className="panel advanced-panel">
                     <div className="bundle-header-row">
                         <div>
-                            <h2>Advanced</h2>
-                            <p className="field-hint">Bundle Transfer tools for manually moving profiles between machines or backups.</p>
+                            <h2>{t('advanced.title')}</h2>
+                            <p className="field-hint">{t('advanced.hint')}</p>
                         </div>
                         <button
                             className="switch-btn secondary advanced-toggle-btn"
@@ -1806,7 +1953,7 @@ function App() {
                             aria-expanded={isBundleExpanded}
                             aria-controls="bundle-transfer-content"
                         >
-                            {isBundleExpanded ? (<><span>Hide</span><ChevronUp size={14} strokeWidth={2.2} /></>) : (<><span>Show</span><ChevronDown size={14} strokeWidth={2.2} /></>)}
+                            {isBundleExpanded ? (<><span>{t('common.hide')}</span><ChevronUp size={14} strokeWidth={2.2} /></>) : (<><span>{t('common.show')}</span><ChevronDown size={14} strokeWidth={2.2} /></>)}
                         </button>
                     </div>
 
@@ -1816,23 +1963,23 @@ function App() {
                                 <div className="advanced-tool-card export-tool-card">
                                     <div className="advanced-tool-head">
                                         <span className="advanced-tool-icon" aria-hidden="true"><Download size={14} strokeWidth={2.1} /></span>
-                                        <h3>Export Profile</h3>
+                                        <h3>{t('advanced.exportTitle')}</h3>
                                     </div>
-                                    <p className="advanced-tool-copy">Export to a .zip bundle for backup or transfer to another machine.</p>
-                                    {profiles.length === 0 && <p className="field-hint">Create or save a profile first, then export it.</p>}
+                                    <p className="advanced-tool-copy">{t('advanced.exportHint')}</p>
+                                    {profiles.length === 0 && <p className="field-hint">{t('advanced.exportEmptyHint')}</p>}
                                     <button className="action-btn advanced-tool-action export-action" onClick={openExportModal} disabled={isLoading || isModalOpen || profiles.length === 0}>
-                                        <Download size={14} strokeWidth={2.1} /> Export Bundle
+                                        <Download size={14} strokeWidth={2.1} /> {t('advanced.exportButton')}
                                     </button>
                                 </div>
 
                                 <div className="advanced-tool-card import-tool-card">
                                     <div className="advanced-tool-head">
                                         <span className="advanced-tool-icon" aria-hidden="true"><Upload size={14} strokeWidth={2.1} /></span>
-                                        <h3>Import Profile</h3>
+                                        <h3>{t('advanced.importTitle')}</h3>
                                     </div>
-                                    <p className="advanced-tool-copy">Import a profile bundle from another machine or backup.</p>
+                                    <p className="advanced-tool-copy">{t('advanced.importHint')}</p>
                                     <button className="action-btn secondary advanced-tool-action import-action" onClick={openImportModal} disabled={isLoading || isModalOpen}>
-                                        <Upload size={14} strokeWidth={2.1} /> Import Bundle
+                                        <Upload size={14} strokeWidth={2.1} /> {t('advanced.importButton')}
                                     </button>
                                 </div>
                             </div>
@@ -1842,7 +1989,7 @@ function App() {
                 </div>
             </main>
             <footer className="footnote">
-                <p>Marker file: active_profile.txt</p>
+                <p>{t('footer.markerFile')}</p>
             </footer>
 
             {toastMessage && (
@@ -1858,45 +2005,45 @@ function App() {
             {isSavePathSetupOpen && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="save-path-setup-title" aria-describedby="save-path-setup-description">
                     <div className="modal-card save-path-setup-card" onClick={(event) => event.stopPropagation()}>
-                        <h3 id="save-path-setup-title">Set SaveGame Path</h3>
+                        <h3 id="save-path-setup-title">{t('modal.savePath.title')}</h3>
                         <p id="save-path-setup-description">
-                            Before continuing, confirm your Need for Speed Heat <span className="path-token">SaveGame</span> folder.
+                            {t('modal.savePath.description')}
                         </p>
-                        <p className="modal-note">Detected path: <strong>{saveGamePath ? maskWindowsUserPath(saveGamePath) : 'Not detected'}</strong></p>
-                        <label className="field-label" htmlFor="startup-savegame-path-input">SaveGame path</label>
+                        <p className="modal-note">{t('modal.savePath.detectedPath', {path: saveGamePath ? maskWindowsUserPath(saveGamePath) : t('common.notDetected')})}</p>
+                        <label className="field-label" htmlFor="startup-savegame-path-input">{t('modal.savePath.fieldLabel')}</label>
                         <input
                             id="startup-savegame-path-input"
                             value={saveGamePathInput}
                             onChange={(event) => setSaveGamePathInput(event.target.value)}
-                            placeholder="C:\\Users\\<user>\\Documents\\Need for speed heat\\SaveGame"
+                            placeholder={t('saveSetup.placeholder')}
                             disabled={isLoading}
                             autoFocus
                         />
-                        <p className="field-hint">Path must point to <span className="path-token">Need for speed heat\SaveGame</span>.</p>
+                        <p className="field-hint">{t('saveSetup.pathHint')}</p>
                         <div className="modal-actions">
                             <button
                                 className="switch-btn secondary"
                                 onClick={() => setIsSavePathSetupOpen(false)}
                                 disabled={isLoading}
                             >
-                                Close for now
+                                {t('common.closeForNow')}
                             </button>
                             <button
                                 className="switch-btn secondary"
                                 onClick={() => void onBrowseSaveGamePath()}
                                 disabled={isLoading}
                             >
-                                Browse...
+                                {t('common.browse')}
                             </button>
                             <button
                                 className="switch-btn secondary"
                                 onClick={() => setSaveGamePathInput(saveGamePath)}
                                 disabled={isLoading || !saveGamePath}
                             >
-                                Use detected path
+                                {t('modal.savePath.useDetected')}
                             </button>
                             <button className="action-btn" onClick={() => void onApplyPath()} disabled={isLoading || !canApplyPath}>
-                                {isLoading ? 'Applying...' : 'Confirm path'}
+                                {isLoading ? t('modal.savePath.applying') : t('modal.savePath.confirm')}
                             </button>
                         </div>
                     </div>
@@ -1906,36 +2053,39 @@ function App() {
             {isFreshConfirmOpen && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="fresh-confirm-modal-title" aria-describedby="fresh-confirm-modal-description">
                     <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-                        <h3 id="fresh-confirm-modal-title">Start New Save</h3>
+                        <h3 id="fresh-confirm-modal-title">{t('modal.freshConfirm.title')}</h3>
                         <p id="fresh-confirm-modal-description">
-                            Do you want to save your current progress into <strong>{activeProfile || 'your active profile'}</strong> before starting fresh with <strong>{freshConfirmProfileName}</strong>?
+                            {t('modal.freshConfirm.description', {
+                                active: activeProfile || t('modal.freshConfirm.defaultActive'),
+                                fresh: freshConfirmProfileName,
+                            })}
                         </p>
                         {!activeProfile.trim() && (
                             <p className="modal-note">
-                                Save first is unavailable until you set an active profile in Diagnostics.
+                                {t('modal.freshConfirm.saveUnavailable')}
                             </p>
                         )}
                         {activeProfile.trim().toLowerCase() === freshConfirmProfileName.trim().toLowerCase() && freshConfirmProfileName.trim() && (
                             <p className="modal-note">
-                                Choose a different fresh profile name to keep your current active profile backup separate.
+                                {t('modal.freshConfirm.nameConflict')}
                             </p>
                         )}
                         <p className="modal-note">
-                            Saving first updates your active profile backup with current <span className="path-token">savegame</span> and <span className="path-token">wraps</span>. Skipping starts fresh and discards the current root progress.
+                            {t('modal.freshConfirm.note')}
                         </p>
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeFreshConfirmModal} disabled={isLoading}>
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button className="switch-btn secondary" onClick={() => void onConfirmPrepareFresh(false)} disabled={isLoading}>
-                                Skip save
+                                {t('modal.freshConfirm.skipSave')}
                             </button>
                             <button
                                 className="action-btn"
                                 onClick={() => void onConfirmPrepareFresh(true)}
                                 disabled={isLoading || !activeProfile.trim() || (activeProfile.trim().toLowerCase() === freshConfirmProfileName.trim().toLowerCase() && freshConfirmProfileName.trim() !== '')}
                             >
-                                Save first
+                                {t('modal.freshConfirm.saveFirst')}
                             </button>
                         </div>
                     </div>
@@ -1945,17 +2095,17 @@ function App() {
             {switchConfirmProfile && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="switch-confirm-modal-title" aria-describedby="switch-confirm-modal-description">
                     <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-                        <h3 id="switch-confirm-modal-title">Switch Active Profile</h3>
+                        <h3 id="switch-confirm-modal-title">{t('modal.switch.title')}</h3>
                         <p id="switch-confirm-modal-description">
-                            Switch active profile from <strong>{activeProfile || 'None selected'}</strong> to <strong>{switchConfirmProfile}</strong>?
+                            {t('modal.switch.description', {current: activeProfile || t('common.noneSelected'), next: switchConfirmProfile})}
                         </p>
-                        <p className="modal-note">This immediately loads the selected profile into your SaveGame root folders.</p>
+                        <p className="modal-note">{t('modal.switch.note')}</p>
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeSwitchConfirmModal} disabled={isLoading}>
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button className="action-btn" onClick={() => void confirmSwitchProfileFromModal()} disabled={isLoading}>
-                                {isLoading ? 'Switching...' : 'Switch profile'}
+                                {isLoading ? t('modal.switch.switching') : t('modal.switch.button')}
                             </button>
                         </div>
                     </div>
@@ -1967,82 +2117,82 @@ function App() {
                     <div className="modal-card" onClick={(event) => event.stopPropagation()}>
                         {diagnosticsModal === 'profiles' ? (
                             <>
-                                <h3 id="diag-modal-title">Create Profiles Folder</h3>
+                                <h3 id="diag-modal-title">{t('modal.diag.profiles.title')}</h3>
                                 <p id="diag-modal-description">
-                                    Diagnostics found that `SaveGame/Profiles` is missing. This action creates the folder so profile operations can work normally.
+                                    {t('modal.diag.profiles.description')}
                                 </p>
                                 <div className="modal-actions">
                                     <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
-                                        Cancel
+                                        {t('common.cancel')}
                                     </button>
                                     <button className="action-btn" onClick={() => void onEnsureProfilesFolder(true)} disabled={isLoading}>
-                                        Create Profiles folder
+                                        {t('modal.diag.profiles.button')}
                                     </button>
                                 </div>
                             </>
                         ) : diagnosticsModal === 'firstSave' ? (
                             <>
-                                <h3 id="diag-modal-title">Save Current Progress First</h3>
+                                <h3 id="diag-modal-title">{t('modal.diag.firstSave.title')}</h3>
                                 <p id="diag-modal-description">
-                                    Create your first profile from the current game state. This will also set it as active.
+                                    {t('modal.diag.firstSave.description')}
                                 </p>
                                 <input
                                     value={firstSaveProfileName}
                                     onChange={(event) => setFirstSaveProfileName(event.target.value)}
-                                    placeholder="New profile name"
+                                    placeholder={t('saveActions.newProfilePlaceholder')}
                                     disabled={isLoading}
                                     autoFocus
                                 />
                                 <div className="modal-actions">
                                     <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
-                                        Cancel
+                                        {t('common.cancel')}
                                     </button>
                                     <button className="action-btn" onClick={() => void onSaveCurrentFromModal()} disabled={isLoading || !firstSaveProfileName.trim()}>
-                                        Save Current Progress
+                                        {t('modal.diag.firstSave.button')}
                                     </button>
                                 </div>
                             </>
                         ) : (
                             <>
-                                <h3 id="diag-modal-title">Set Active Profile</h3>
+                                <h3 id="diag-modal-title">{t('modal.diag.marker.title')}</h3>
                                 <p id="diag-modal-description">
-                                    This creates `active_profile.txt` and marks which profile should be considered active for save operations.
+                                    {t('modal.diag.marker.description')}
                                 </p>
 
                                 {needsProfilesFolderFix ? (
                                     <>
-                                        <p className="modal-note">Profiles folder is missing first. Create it, then choose an active profile.</p>
+                                        <p className="modal-note">{t('modal.diag.marker.profilesMissing')}</p>
                                         <div className="modal-actions">
                                             <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
-                                                Cancel
+                                                {t('common.cancel')}
                                             </button>
                                             <button className="action-btn" onClick={() => void onEnsureProfilesFolder()} disabled={isLoading}>
-                                                Create Profiles folder first
+                                                {t('modal.diag.marker.createProfilesFirst')}
                                             </button>
                                         </div>
                                     </>
                                 ) : profiles.length === 0 ? (
                                     <>
-                                        <p className="modal-note">No profiles exist yet. Create one using Start New Save or Save Current Progress first.</p>
+                                        <p className="modal-note">{t('modal.diag.marker.noProfiles')}</p>
                                         <div className="modal-actions">
                                             <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
-                                                Close
+                                                {t('common.close')}
                                             </button>
                                             <button className="action-btn" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
-                                                Save Current Progress first
+                                                {t('modal.diag.marker.saveCurrentFirst')}
                                             </button>
                                         </div>
                                     </>
                                 ) : (
                                     <>
                                         {!activeProfile.trim() && (
-                                            <p className="modal-note">No active profile marker detected. Choose an existing profile below or save current progress first.</p>
+                                            <p className="modal-note">{t('modal.diag.marker.noActiveDetected')}</p>
                                         )}
                                         <select
                                             value={markerDialogProfile}
                                             onChange={(event) => setMarkerDialogProfile(event.target.value)}
                                             disabled={isLoading}
-                                            aria-label="Choose active profile"
+                                            aria-label={t('modal.diag.marker.chooseActiveAria')}
                                         >
                                             {profiles.map((profile) => (
                                                 <option key={profile.name} value={profile.name}>
@@ -2050,18 +2200,18 @@ function App() {
                                                 </option>
                                             ))}
                                         </select>
-                                        <p className="modal-note">Selected profile: <strong>{markerDialogProfile || 'None selected'}</strong></p>
+                                        <p className="modal-note">{t('modal.diag.marker.selectedProfile', {name: markerDialogProfile || t('common.noneSelected')})}</p>
                                         <div className="modal-actions">
                                             <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
-                                                Cancel
+                                                {t('common.cancel')}
                                             </button>
                                             {!activeProfile.trim() && (
                                                 <button className="switch-btn secondary" onClick={() => setDiagnosticsModal('firstSave')} disabled={isLoading}>
-                                                    Save Current Progress first
+                                                    {t('modal.diag.marker.saveCurrentFirst')}
                                                 </button>
                                             )}
                                             <button className="action-btn" onClick={() => void onCreateMarkerFile(markerDialogProfile)} disabled={isLoading || !markerDialogProfile.trim()}>
-                                                Set active profile
+                                                {t('modal.diag.marker.setActiveButton')}
                                             </button>
                                         </div>
                                     </>
@@ -2075,9 +2225,9 @@ function App() {
             {isExportModalOpen && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" aria-describedby="export-modal-description">
                     <div className="modal-card export-modal-card" onClick={(event) => event.stopPropagation()}>
-                        <h3 id="export-modal-title">Export Profile Bundle</h3>
-                        <p id="export-modal-description">Choose which profile to export. The bundle will be created in <span className="path-token">SaveGame/Exports</span>.</p>
-                        <label className="field-label" htmlFor="export-profile-modal-input">Profile to export</label>
+                        <h3 id="export-modal-title">{t('modal.export.title')}</h3>
+                        <p id="export-modal-description">{t('modal.export.description')}</p>
+                        <label className="field-label" htmlFor="export-profile-modal-input">{t('modal.export.label')}</label>
                         <select
                             id="export-profile-modal-input"
                             value={exportProfileName}
@@ -2086,7 +2236,7 @@ function App() {
                             autoFocus
                         >
                             {profiles.length === 0 ? (
-                                <option value="">No profiles available</option>
+                                <option value="">{t('modal.export.none')}</option>
                             ) : (
                                 profiles.map((profile) => (
                                     <option key={profile.name} value={profile.name}>
@@ -2097,10 +2247,10 @@ function App() {
                         </select>
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeExportModal} disabled={isLoading}>
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button className="action-btn" onClick={() => void onExportBundle()} disabled={isLoading || !canExportBundle}>
-                                <Download size={14} strokeWidth={2.1} /> Export Bundle
+                                <Download size={14} strokeWidth={2.1} /> {t('modal.export.button')}
                             </button>
                         </div>
                     </div>
@@ -2110,9 +2260,9 @@ function App() {
             {isImportModalOpen && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="import-modal-title" aria-describedby="import-modal-description">
                     <div className="modal-card import-modal-card" onClick={(event) => event.stopPropagation()}>
-                        <h3 id="import-modal-title">Import Profile Bundle</h3>
-                        <p id="import-modal-description">Choose destination profile and bundle file to import.</p>
-                        <label className="field-label" htmlFor="import-profile-modal-input">Import .zip into profile</label>
+                        <h3 id="import-modal-title">{t('modal.import.title')}</h3>
+                        <p id="import-modal-description">{t('modal.import.description')}</p>
+                        <label className="field-label" htmlFor="import-profile-modal-input">{t('modal.import.label')}</label>
                         <div className="field-row import-modal-row">
                             <select
                                 id="import-profile-modal-input"
@@ -2131,10 +2281,10 @@ function App() {
                                         {profile.name}
                                     </option>
                                 ))}
-                                <option value={NEW_PROFILE_OPTION}>Create new profile...</option>
+                                <option value={NEW_PROFILE_OPTION}>{t('saveActions.createNewProfileOption')}</option>
                             </select>
                             <button className="switch-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading}>
-                                Browse...
+                                {t('common.browse')}
                             </button>
                         </div>
                         {importTargetProfile === NEW_PROFILE_OPTION && (
@@ -2143,18 +2293,18 @@ function App() {
                                     ref={importNewProfileRef}
                                     value={importTargetNewName}
                                     onChange={(event) => setImportTargetNewName(event.target.value)}
-                                    placeholder="New profile name"
+                                    placeholder={t('saveActions.newProfilePlaceholder')}
                                     disabled={isLoading}
                                 />
                             </div>
                         )}
-                        <p className="field-hint import-modal-selected">Selected bundle: <strong>{importBundlePath || 'None selected'}</strong></p>
+                        <p className="field-hint import-modal-selected">{t('modal.import.selectedBundle', {path: importBundlePath || t('common.noneSelectedBundle')})}</p>
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeImportModal} disabled={isLoading}>
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button className="action-btn import-action" onClick={() => void onImportBundle()} disabled={isLoading || !canImportBundle}>
-                                <Upload size={14} strokeWidth={2.1} /> Import Bundle
+                                <Upload size={14} strokeWidth={2.1} /> {t('modal.import.button')}
                             </button>
                         </div>
                     </div>
@@ -2164,8 +2314,8 @@ function App() {
             {renameTarget && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="rename-modal-title" aria-describedby="rename-modal-description">
                     <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-                        <h3 id="rename-modal-title">Rename Profile</h3>
-                        <p id="rename-modal-description">Choose a new name for <strong>{renameTarget}</strong>.</p>
+                        <h3 id="rename-modal-title">{t('modal.rename.title')}</h3>
+                        <p id="rename-modal-description">{t('modal.rename.description', {name: renameTarget})}</p>
                         <input
                             value={renameValue}
                             onChange={(event) => setRenameValue(event.target.value)}
@@ -2180,10 +2330,10 @@ function App() {
                         />
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeRenameModal} disabled={isLoading}>
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button className="action-btn" onClick={() => void confirmRenameProfile()} disabled={isLoading}>
-                                Rename
+                                {t('common.rename')}
                             </button>
                         </div>
                     </div>
@@ -2193,21 +2343,21 @@ function App() {
             {deleteTarget && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title" aria-describedby="delete-modal-description">
                     <div className="modal-card danger" onClick={(event) => event.stopPropagation()}>
-                        <h3 id="delete-modal-title">Delete Profile</h3>
-                        <p id="delete-modal-description">Delete <strong>{deleteTarget}</strong>? This action cannot be undone.</p>
+                        <h3 id="delete-modal-title">{t('modal.delete.title')}</h3>
+                        <p id="delete-modal-description">{t('modal.delete.description', {name: deleteTarget})}</p>
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeDeleteModal} disabled={isLoading}>
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button className="switch-btn danger" onClick={() => void confirmDeleteProfile()} disabled={isLoading}>
-                                Delete
+                                {t('common.delete')}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="app-version-chip" aria-label="Current app version">
+            <div className="app-version-chip" aria-label={t('aria.appVersion')}>
                 v{(appVersion || updateInfo?.currentVersion || 'dev').replace(/^v/i, '')}
             </div>
         </div>
