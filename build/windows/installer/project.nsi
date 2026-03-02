@@ -97,6 +97,11 @@ Section
 
     SetOutPath $INSTDIR
 
+    ${If} $AutoRestartAfterInstall == "1"
+        ExecWait '"$SYSDIR\taskkill.exe" /IM "${PRODUCT_EXECUTABLE}" /T /F'
+        Sleep 700
+    ${EndIf}
+
     !insertmacro wails.files
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"

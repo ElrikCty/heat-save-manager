@@ -784,9 +784,7 @@ function App() {
             setStatus(message);
             showToast(message, 'info');
 
-            window.setTimeout(() => {
-                void Quit();
-            }, 1400);
+            void Quit();
 
             window.setTimeout(() => {
                 setIsLoading(false);
