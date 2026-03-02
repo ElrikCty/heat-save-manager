@@ -117,7 +117,7 @@ if (-not $PreviousTag) {
 }
 
 $range = if ($PreviousTag) { "$PreviousTag..$Tag" } else { $Tag }
-$logLines = git log --pretty=format:"%H`t%h`t%s`t%an" $range
+$logLines = git log --first-parent --pretty=format:"%H`t%h`t%s`t%an" $range
 
 $prItems = New-Object System.Collections.Generic.List[object]
 $directCommitItems = New-Object System.Collections.Generic.List[object]
@@ -297,7 +297,8 @@ if ($outputDir) {
     New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 }
 
-[System.IO.File]::WriteAllText($outputAbsolutePath, $output + [Environment]::NewLine, [System.Text.Encoding]::UTF8)
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[System.IO.File]::WriteAllText($outputAbsolutePath, $output + [Environment]::NewLine, $utf8NoBom)
 Write-Host "Release notes generated: $OutputPath"
 Write-Host ""
 Write-Host $output
