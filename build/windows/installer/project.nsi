@@ -53,6 +53,7 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 Var AutoRestartAfterInstall
+Var InAppInstallTargetPath
 
 !define MUI_ICON "..\icon.ico"
 !define MUI_UNICON "..\icon.ico"
@@ -85,9 +86,27 @@ Function .onInit
    ${GetOptions} $R0 "/AUTORESTARTAPP" $R1
    ${IfNot} ${Errors}
       StrCpy $AutoRestartAfterInstall "1"
+      Call ResolveInAppInstallTarget
    ${EndIf}
 
    !insertmacro wails.checkArchitecture
+FunctionEnd
+
+Function ResolveInAppInstallTarget
+   StrCpy $InAppInstallTargetPath ""
+
+   nsExec::ExecToStack "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command $\"[Console]::Out.Write((Get-CimInstance Win32_Process -Filter 'Name=''${PRODUCT_EXECUTABLE}''' -ErrorAction SilentlyContinue | Sort-Object CreationDate -Descending | Select-Object -First 1 -ExpandProperty ExecutablePath))$\""
+   Pop $R0
+   Pop $R1
+
+   StrCmp $R0 "0" 0 done
+   StrCmp $R1 "" done
+
+   ${GetParent} "$R1" $InAppInstallTargetPath
+   StrCmp $InAppInstallTargetPath "" done
+   StrCpy $INSTDIR "$InAppInstallTargetPath"
+
+done:
 FunctionEnd
 
 Section
@@ -98,7 +117,7 @@ Section
     SetOutPath $INSTDIR
 
     ${If} $AutoRestartAfterInstall == "1"
-        ExecWait '"$SYSDIR\taskkill.exe" /IM "${PRODUCT_EXECUTABLE}" /T /F'
+        nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM "${PRODUCT_EXECUTABLE}" /T /F'
         Sleep 700
     ${EndIf}
 

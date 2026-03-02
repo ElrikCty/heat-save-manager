@@ -336,6 +336,16 @@ func sanitizeFileName(name string) string {
 	return result
 }
 
+func buildInstallerArguments(installDir string) string {
+	arguments := "/S /AUTORESTARTAPP"
+	trimmedInstallDir := strings.TrimSpace(installDir)
+	if trimmedInstallDir == "" {
+		return arguments
+	}
+
+	return arguments + " /D=" + trimmedInstallDir
+}
+
 type execLauncher struct{}
 
 func (e execLauncher) Start(installerPath string) error {

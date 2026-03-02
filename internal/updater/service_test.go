@@ -162,3 +162,18 @@ func TestStartFailsWhenDownloadExceedsLimit(t *testing.T) {
 		t.Fatalf("expected size limit error, got %q", err)
 	}
 }
+
+func TestBuildInstallerArgumentsWithoutInstallDir(t *testing.T) {
+	arguments := buildInstallerArguments("")
+	if arguments != "/S /AUTORESTARTAPP" {
+		t.Fatalf("expected base installer arguments, got %q", arguments)
+	}
+}
+
+func TestBuildInstallerArgumentsWithInstallDir(t *testing.T) {
+	arguments := buildInstallerArguments(` C:\Program Files\Eduardo Baltra\Heat Save Manager `)
+	wanted := `/S /AUTORESTARTAPP /D=C:\Program Files\Eduardo Baltra\Heat Save Manager`
+	if arguments != wanted {
+		t.Fatalf("expected %q, got %q", wanted, arguments)
+	}
+}

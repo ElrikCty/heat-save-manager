@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -33,7 +34,8 @@ func startInstallerElevated(installerPath string) error {
 		return fmt.Errorf("build installer path: %w", err)
 	}
 
-	arguments, err := syscall.UTF16PtrFromString("/S /AUTORESTARTAPP")
+	argumentsValue := buildInstallerArguments(resolveInstallerInstallDir())
+	arguments, err := syscall.UTF16PtrFromString(argumentsValue)
 	if err != nil {
 		return fmt.Errorf("build installer arguments: %w", err)
 	}
@@ -77,6 +79,25 @@ func startInstallerElevated(installerPath string) error {
 	}
 
 	return fmt.Errorf("shell execute installer returned code %d", operationResult)
+}
+
+func resolveInstallerInstallDir() string {
+	executablePath, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+
+	trimmedExecutablePath := strings.TrimSpace(executablePath)
+	if trimmedExecutablePath == "" {
+		return ""
+	}
+
+	installDir := strings.TrimSpace(filepath.Dir(trimmedExecutablePath))
+	if installDir == "" || installDir == "." {
+		return ""
+	}
+
+	return filepath.Clean(installDir)
 }
 
 var (
