@@ -333,6 +333,7 @@ function App() {
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [activeProfile, setActiveProfile] = useState('');
     const [freshProfileName, setFreshProfileName] = useState('');
+    const [freshPrepareMode, setFreshPrepareMode] = useState<'saveFirst' | 'skipSave' | null>(null);
     const [saveDestinationMode, setSaveDestinationMode] = useState<'active' | 'custom'>('active');
     const [saveDestinationProfile, setSaveDestinationProfile] = useState('');
     const [saveDestinationNewName, setSaveDestinationNewName] = useState('');
@@ -352,8 +353,8 @@ function App() {
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [firstSaveProfileName, setFirstSaveProfileName] = useState('');
-    const [freshConfirmProfileName, setFreshConfirmProfileName] = useState('');
     const [isFreshConfirmOpen, setIsFreshConfirmOpen] = useState(false);
+    const [isFreshNameModalOpen, setIsFreshNameModalOpen] = useState(false);
     const [isBundleExpanded, setIsBundleExpanded] = useState(false);
     const [selectedProfileName, setSelectedProfileName] = useState('');
     const [toastMessage, setToastMessage] = useState('');
@@ -384,10 +385,9 @@ function App() {
 
     const t = useMemo(() => createTranslator(language), [language]);
 
-    const isModalOpen = isSavePathSetupOpen || switchConfirmProfile !== null || renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen || isFreshConfirmOpen;
+    const isModalOpen = isSavePathSetupOpen || switchConfirmProfile !== null || renameTarget !== null || deleteTarget !== null || diagnosticsModal !== null || isExportModalOpen || isImportModalOpen || isFreshConfirmOpen || isFreshNameModalOpen;
 
     const canApplyPath = saveGamePathInput.trim() !== '';
-    const canPrepareFresh = freshProfileName.trim() !== '';
     const canExportBundle = exportProfileName.trim() !== '';
     const resolvedImportTarget = importTargetProfile === NEW_PROFILE_OPTION ? importTargetNewName.trim() : importTargetProfile.trim();
     const canImportBundle = resolvedImportTarget !== '' && importBundlePath.trim() !== '';
@@ -621,6 +621,10 @@ function App() {
             });
 
             setExportProfileName((current) => {
+                if (resolvedActive && profileItems.some((profile) => profile.name === resolvedActive)) {
+                    return resolvedActive;
+                }
+
                 if (current && profileItems.some((profile) => profile.name === current)) {
                     return current;
                 }
@@ -631,6 +635,10 @@ function App() {
             setImportTargetProfile((current) => {
                 if (current === NEW_PROFILE_OPTION) {
                     return NEW_PROFILE_OPTION;
+                }
+
+                if (resolvedActive && profileItems.some((profile) => profile.name === resolvedActive)) {
+                    return resolvedActive;
                 }
 
                 if (current && profileItems.some((profile) => profile.name === current)) {
@@ -1032,26 +1040,40 @@ function App() {
     }
 
     async function onPrepareFresh() {
+        setFreshPrepareMode(null);
+        setFreshProfileName('');
+        setIsFreshConfirmOpen(true);
+    }
+
+    function closeFreshFlow() {
+        setIsFreshConfirmOpen(false);
+        setIsFreshNameModalOpen(false);
+        setFreshPrepareMode(null);
+        setFreshProfileName('');
+    }
+
+    function onChooseFreshMode(preserveCurrent: boolean) {
+        if (preserveCurrent && !activeProfile.trim()) {
+            setStatus(t('status.saveFirstNeedsActive'));
+            setRecoveryHint(t('status.saveFirstNeedsActiveHint'));
+            return;
+        }
+
+        setFreshPrepareMode(preserveCurrent ? 'saveFirst' : 'skipSave');
+        setIsFreshConfirmOpen(false);
+        setIsFreshNameModalOpen(true);
+    }
+
+    async function onConfirmPrepareFresh() {
         const name = freshProfileName.trim();
         if (!name) {
             setStatus(t('status.chooseFreshName'));
             return;
         }
 
-        setFreshConfirmProfileName(name);
-        setIsFreshConfirmOpen(true);
-    }
-
-    function closeFreshConfirmModal() {
-        setIsFreshConfirmOpen(false);
-        setFreshConfirmProfileName('');
-    }
-
-    async function onConfirmPrepareFresh(preserveCurrent: boolean) {
-        const name = freshConfirmProfileName.trim();
-        if (!name) {
-            setStatus(t('status.chooseFreshName'));
-            closeFreshConfirmModal();
+        const preserveCurrent = freshPrepareMode === 'saveFirst';
+        if (!preserveCurrent && freshPrepareMode !== 'skipSave') {
+            closeFreshFlow();
             return;
         }
 
@@ -1070,6 +1092,13 @@ function App() {
             return;
         }
 
+        const hasExistingProfile = profiles.some((profile) => profile.name.trim().toLowerCase() === name.toLowerCase());
+        if (hasExistingProfile) {
+            setStatus(t('feedback.profileExists.message'));
+            setRecoveryHint(t('feedback.profileExists.hint'));
+            return;
+        }
+
         try {
             setIsLoading(true);
             setStatus(preserveCurrent
@@ -1081,9 +1110,7 @@ function App() {
             } else {
                 await PrepareFreshProfileWithoutSave(name);
             }
-            setFreshProfileName('');
-            setFreshConfirmProfileName('');
-            setIsFreshConfirmOpen(false);
+            closeFreshFlow();
             setActiveProfile(name);
             await loadData();
             setStatus(preserveCurrent
@@ -1271,6 +1298,13 @@ function App() {
     }
 
     function openExportModal() {
+        setExportProfileName(() => {
+            if (activeProfile.trim() && profiles.some((profile) => profile.name === activeProfile)) {
+                return activeProfile;
+            }
+
+            return profiles[0]?.name ?? '';
+        });
         setIsExportModalOpen(true);
     }
 
@@ -1279,6 +1313,14 @@ function App() {
     }
 
     function openImportModal() {
+        setImportTargetProfile(() => {
+            if (activeProfile.trim() && profiles.some((profile) => profile.name === activeProfile)) {
+                return activeProfile;
+            }
+
+            return profiles[0]?.name ?? NEW_PROFILE_OPTION;
+        });
+        setImportTargetNewName('');
         setIsImportModalOpen(true);
     }
 
@@ -1346,6 +1388,11 @@ function App() {
             return;
         }
 
+        if (isFreshNameModalOpen || isFreshConfirmOpen) {
+            closeFreshFlow();
+            return;
+        }
+
         if (isExportModalOpen) {
             closeExportModal();
             return;
@@ -1353,11 +1400,6 @@ function App() {
 
         if (isImportModalOpen) {
             closeImportModal();
-            return;
-        }
-
-        if (isFreshConfirmOpen) {
-            closeFreshConfirmModal();
         }
     }
 
@@ -1528,7 +1570,7 @@ function App() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isModalOpen, isLoading, switchConfirmProfile, renameTarget, deleteTarget, diagnosticsModal, isExportModalOpen, isImportModalOpen, isFreshConfirmOpen]);
+    }, [isModalOpen, isLoading, switchConfirmProfile, renameTarget, deleteTarget, diagnosticsModal, isExportModalOpen, isImportModalOpen, isFreshConfirmOpen, isFreshNameModalOpen]);
 
     useEffect(() => {
         if (importTargetProfile === NEW_PROFILE_OPTION) {
@@ -1814,21 +1856,13 @@ function App() {
                     <div className="save-actions-grid">
                         <div className="setup-group save-card start-save-card">
                             <div className="save-card-head">
-                                <span className="save-card-icon" aria-hidden="true"><Plus size={14} strokeWidth={2.2} /></span>
-                                <label className="field-label" htmlFor="fresh-profile-input">{t('saveActions.startNewTitle')}</label>
+                                <p className="field-label">{t('saveActions.startNewTitle')}</p>
                             </div>
-                            <div className="field-row">
-                                <input
-                                    id="fresh-profile-input"
-                                    value={freshProfileName}
-                                    onChange={(event) => setFreshProfileName(event.target.value)}
-                                    placeholder={t('saveActions.newProfilePlaceholder')}
-                                    disabled={isLoading || isModalOpen}
-                                />
-                                <button className="action-btn" onClick={() => void onPrepareFresh()} disabled={isLoading || isModalOpen || !canPrepareFresh}>
-                                    <Plus size={14} strokeWidth={2.2} /> {t('saveActions.startNewButton')}
-                                </button>
-                            </div>
+                            <p className="save-card-copy">{t('saveActions.startNewDescription')}</p>
+                            <button className="action-btn" onClick={() => void onPrepareFresh()} disabled={isLoading || isModalOpen}>
+                                <Plus size={14} strokeWidth={2.2} />
+                                {t('saveActions.startNewButton')}
+                            </button>
                         </div>
 
                         <div className="setup-group save-current-group save-card save-progress-card">
@@ -2055,7 +2089,6 @@ function App() {
                         <p id="fresh-confirm-modal-description">
                             {t('modal.freshConfirm.description', {
                                 active: activeProfile || t('modal.freshConfirm.defaultActive'),
-                                fresh: freshConfirmProfileName,
                             })}
                         </p>
                         {!activeProfile.trim() && (
@@ -2063,27 +2096,55 @@ function App() {
                                 {t('modal.freshConfirm.saveUnavailable')}
                             </p>
                         )}
-                        {activeProfile.trim().toLowerCase() === freshConfirmProfileName.trim().toLowerCase() && freshConfirmProfileName.trim() && (
-                            <p className="modal-note">
-                                {t('modal.freshConfirm.nameConflict')}
-                            </p>
-                        )}
                         <p className="modal-note">
                             {t('modal.freshConfirm.note')}
                         </p>
                         <div className="modal-actions">
-                            <button className="switch-btn secondary" onClick={closeFreshConfirmModal} disabled={isLoading}>
+                            <button className="switch-btn secondary" onClick={closeFreshFlow} disabled={isLoading}>
                                 {t('common.cancel')}
                             </button>
-                            <button className="switch-btn secondary" onClick={() => void onConfirmPrepareFresh(false)} disabled={isLoading}>
+                            <button className="switch-btn secondary" onClick={() => onChooseFreshMode(false)} disabled={isLoading}>
                                 {t('modal.freshConfirm.skipSave')}
                             </button>
                             <button
                                 className="action-btn"
-                                onClick={() => void onConfirmPrepareFresh(true)}
-                                disabled={isLoading || !activeProfile.trim() || (activeProfile.trim().toLowerCase() === freshConfirmProfileName.trim().toLowerCase() && freshConfirmProfileName.trim() !== '')}
+                                onClick={() => onChooseFreshMode(true)}
+                                disabled={isLoading || !activeProfile.trim()}
                             >
                                 {t('modal.freshConfirm.saveFirst')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isFreshNameModalOpen && (
+                <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="fresh-name-modal-title" aria-describedby="fresh-name-modal-description">
+                    <div className="modal-card fresh-name-modal-card" onClick={(event) => event.stopPropagation()}>
+                        <h3 id="fresh-name-modal-title">{t('modal.freshName.title')}</h3>
+                        <p id="fresh-name-modal-description">{t('modal.freshName.description')}</p>
+                        <label className="field-label" htmlFor="fresh-profile-modal-input">{t('modal.freshName.label')}</label>
+                        <input
+                            id="fresh-profile-modal-input"
+                            value={freshProfileName}
+                            onChange={(event) => setFreshProfileName(event.target.value)}
+                            placeholder={t('saveActions.newProfilePlaceholder')}
+                            disabled={isLoading}
+                            autoFocus
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    void onConfirmPrepareFresh();
+                                }
+                            }}
+                        />
+                        <div className="modal-actions">
+                            <button className="switch-btn secondary" onClick={closeFreshFlow} disabled={isLoading}>
+                                {t('common.cancel')}
+                            </button>
+                            <button className="action-btn" onClick={() => void onConfirmPrepareFresh()} disabled={isLoading || !freshProfileName.trim()}>
+                                <Plus size={14} strokeWidth={2.2} />
+                                {t('saveActions.startNewButton')}
                             </button>
                         </div>
                     </div>
@@ -2260,43 +2321,52 @@ function App() {
                     <div className="modal-card import-modal-card" onClick={(event) => event.stopPropagation()}>
                         <h3 id="import-modal-title">{t('modal.import.title')}</h3>
                         <p id="import-modal-description">{t('modal.import.description')}</p>
-                        <label className="field-label" htmlFor="import-profile-modal-input">{t('modal.import.label')}</label>
-                        <div className="field-row import-modal-row">
-                            <select
-                                id="import-profile-modal-input"
-                                value={importTargetProfile}
-                                onChange={(event) => {
-                                    const next = event.target.value;
-                                    setImportTargetProfile(next);
-                                    if (next !== NEW_PROFILE_OPTION) {
-                                        setImportTargetNewName('');
-                                    }
-                                }}
-                                disabled={isLoading}
-                            >
-                                {profiles.map((profile) => (
-                                    <option key={profile.name} value={profile.name}>
-                                        {profile.name}
-                                    </option>
-                                ))}
-                                <option value={NEW_PROFILE_OPTION}>{t('saveActions.createNewProfileOption')}</option>
-                            </select>
-                            <button className="switch-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading}>
-                                {t('common.browse')}
-                            </button>
-                        </div>
-                        {importTargetProfile === NEW_PROFILE_OPTION && (
-                            <div className="field-row">
-                                <input
-                                    ref={importNewProfileRef}
-                                    value={importTargetNewName}
-                                    onChange={(event) => setImportTargetNewName(event.target.value)}
-                                    placeholder={t('saveActions.newProfilePlaceholder')}
+                        <div className="import-modal-section">
+                            <label className="field-label" htmlFor="import-profile-modal-input">{t('modal.import.label')}</label>
+                            <div className="import-modal-destination">
+                                <select
+                                    id="import-profile-modal-input"
+                                    value={importTargetProfile}
+                                    onChange={(event) => {
+                                        const next = event.target.value;
+                                        setImportTargetProfile(next);
+                                        if (next !== NEW_PROFILE_OPTION) {
+                                            setImportTargetNewName('');
+                                        }
+                                    }}
                                     disabled={isLoading}
-                                />
+                                >
+                                    {profiles.map((profile) => (
+                                        <option key={profile.name} value={profile.name}>
+                                            {profile.name}
+                                        </option>
+                                    ))}
+                                    <option value={NEW_PROFILE_OPTION}>{t('saveActions.createNewProfileOption')}</option>
+                                </select>
                             </div>
-                        )}
-                        <p className="field-hint import-modal-selected">{t('modal.import.selectedBundle', {path: importBundlePath || t('common.noneSelectedBundle')})}</p>
+                            {importTargetProfile === NEW_PROFILE_OPTION && (
+                                <div className="import-modal-destination import-modal-new-profile-row">
+                                    <input
+                                        ref={importNewProfileRef}
+                                        value={importTargetNewName}
+                                        onChange={(event) => setImportTargetNewName(event.target.value)}
+                                        placeholder={t('saveActions.newProfilePlaceholder')}
+                                        disabled={isLoading}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                        <div className="import-modal-section import-modal-bundle-section">
+                            <p className="field-label import-bundle-label">{t('modal.import.bundleLabel')}</p>
+                            <div className="field-row import-bundle-row">
+                                <div className={`import-bundle-display${importBundlePath.trim() ? '' : ' is-placeholder'}`} title={importBundlePath || t('common.noneSelectedBundle')}>
+                                    {importBundlePath || t('common.noneSelectedBundle')}
+                                </div>
+                                <button className="switch-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading}>
+                                    {t('common.browse')}
+                                </button>
+                            </div>
+                        </div>
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeImportModal} disabled={isLoading}>
                                 {t('common.cancel')}

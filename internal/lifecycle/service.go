@@ -71,6 +71,7 @@ func (s *Service) prepareFreshProfile(profileName string, preserveCurrent bool) 
 		return err
 	}
 
+	activeName := ""
 	if preserveCurrent {
 		activeProfile, err := s.marker.ReadActiveProfile()
 		if err != nil {
@@ -81,7 +82,7 @@ func (s *Service) prepareFreshProfile(profileName string, preserveCurrent bool) 
 			return err
 		}
 
-		activeName, err := validateProfileName(activeProfile)
+		activeName, err = validateProfileName(activeProfile)
 		if err != nil {
 			return ErrActiveProfileRequired
 		}
@@ -89,7 +90,13 @@ func (s *Service) prepareFreshProfile(profileName string, preserveCurrent bool) 
 		if strings.EqualFold(activeName, name) {
 			return ErrFreshProfileNameConflict
 		}
+	}
 
+	if err := s.ensureFreshProfileDoesNotExist(name); err != nil {
+		return err
+	}
+
+	if preserveCurrent {
 		if err := s.SaveCurrentProfile(activeName); err != nil {
 			return err
 		}
@@ -254,6 +261,17 @@ func (s *Service) resolveProfileName(profileName string) (string, error) {
 	}
 
 	return validateProfileName(active)
+}
+
+func (s *Service) ensureFreshProfileDoesNotExist(profileName string) error {
+	profilePath := filepath.Join(s.profilesPath, profileName)
+	if _, err := os.Stat(profilePath); err == nil {
+		return ErrProfileAlreadyExists
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) validateDependencies() error {

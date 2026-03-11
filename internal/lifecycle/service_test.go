@@ -87,6 +87,68 @@ func TestPrepareFreshProfilePreserveRejectsSameAsActiveName(t *testing.T) {
 	}
 }
 
+func TestPrepareFreshProfilePreserveRejectsExistingProfileName(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+
+	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "old-save")
+	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "old-wrap")
+	createDirWithFile(t, filepath.Join(profilesPath, "fresh-01", "savegame"), "slot.sav", "existing-save")
+	createDirWithFile(t, filepath.Join(profilesPath, "fresh-01", "wraps"), "wrap.txt", "existing-wrap")
+
+	store := marker.NewStore(saveGamePath)
+	if err := store.WriteActiveProfile("current-main"); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
+	err := svc.PrepareFreshProfile("fresh-01")
+	if !errors.Is(err, ErrProfileAlreadyExists) {
+		t.Fatalf("expected ErrProfileAlreadyExists, got %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(saveGamePath, "savegame", "slot.sav"), "old-save")
+	assertFileContent(t, filepath.Join(saveGamePath, "wraps", "wrap.txt"), "old-wrap")
+	assertFileContent(t, filepath.Join(profilesPath, "fresh-01", "savegame", "slot.sav"), "existing-save")
+	assertFileContent(t, filepath.Join(profilesPath, "fresh-01", "wraps", "wrap.txt"), "existing-wrap")
+
+	active, err := store.ReadActiveProfile()
+	if err != nil {
+		t.Fatalf("read marker: %v", err)
+	}
+
+	if active != "current-main" {
+		t.Fatalf("expected active profile current-main, got %q", active)
+	}
+}
+
+func TestPrepareFreshProfileWithoutSaveRejectsExistingProfileName(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+
+	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "old-save")
+	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "old-wrap")
+	createDirWithFile(t, filepath.Join(profilesPath, "fresh-empty", "savegame"), "slot.sav", "existing-save")
+	createDirWithFile(t, filepath.Join(profilesPath, "fresh-empty", "wraps"), "wrap.txt", "existing-wrap")
+
+	svc := NewService(saveGamePath, profilesPath, marker.NewStore(saveGamePath), fsops.NewLocal())
+	err := svc.PrepareFreshProfileWithoutSave("fresh-empty")
+	if !errors.Is(err, ErrProfileAlreadyExists) {
+		t.Fatalf("expected ErrProfileAlreadyExists, got %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(saveGamePath, "savegame", "slot.sav"), "old-save")
+	assertFileContent(t, filepath.Join(saveGamePath, "wraps", "wrap.txt"), "old-wrap")
+	assertFileContent(t, filepath.Join(profilesPath, "fresh-empty", "savegame", "slot.sav"), "existing-save")
+	assertFileContent(t, filepath.Join(profilesPath, "fresh-empty", "wraps", "wrap.txt"), "existing-wrap")
+}
+
 func assertDirEmpty(t *testing.T, path string) {
 	t.Helper()
 
