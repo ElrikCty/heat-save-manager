@@ -327,6 +327,10 @@ func (a *App) DeleteProfile(profileName string) error {
 	return a.newLifecycleService().DeleteProfile(profileName)
 }
 
+func (a *App) DeleteActiveProfile(replacementProfileName string) error {
+	return a.newLifecycleService().DeleteActiveProfile(replacementProfileName)
+}
+
 func (a *App) RunHealthCheck() health.Report {
 	return health.NewService(a.saveGamePath, a.profilesPath).Run()
 }

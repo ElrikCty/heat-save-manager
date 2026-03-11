@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"heat-save-manager/internal/fsops"
@@ -374,6 +375,103 @@ func TestDeleteProfileRemovesNonActiveProfile(t *testing.T) {
 	}
 }
 
+func TestDeleteActiveProfileSwitchesReplacementAndRemovesOldProfile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+	createDirWithFile(t, filepath.Join(saveGamePath, "savegame"), "slot.sav", "root-save")
+	createDirWithFile(t, filepath.Join(saveGamePath, "wraps"), "wrap.txt", "root-wrap")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame"), "slot.sav", "alpha-save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps"), "wrap.txt", "alpha-wrap")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileBeta", "savegame"), "slot.sav", "beta-save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileBeta", "wraps"), "wrap.txt", "beta-wrap")
+
+	store := marker.NewStore(saveGamePath)
+	if err := store.WriteActiveProfile("ProfileAlpha"); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
+	if err := svc.DeleteActiveProfile("ProfileBeta"); err != nil {
+		t.Fatalf("delete active profile: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(profilesPath, "ProfileAlpha")); !os.IsNotExist(err) {
+		t.Fatalf("expected deleted active profile not found, got %v", err)
+	}
+
+	assertFileContent(t, filepath.Join(saveGamePath, "savegame", "slot.sav"), "beta-save")
+	assertFileContent(t, filepath.Join(saveGamePath, "wraps", "wrap.txt"), "beta-wrap")
+
+	active, err := store.ReadActiveProfile()
+	if err != nil {
+		t.Fatalf("read active marker: %v", err)
+	}
+
+	if active != "ProfileBeta" {
+		t.Fatalf("expected active marker ProfileBeta, got %q", active)
+	}
+}
+
+func TestDeleteActiveProfileRejectsSameReplacement(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame"), "slot.sav", "alpha-save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps"), "wrap.txt", "alpha-wrap")
+
+	store := marker.NewStore(saveGamePath)
+	if err := store.WriteActiveProfile("ProfileAlpha"); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	svc := NewService(saveGamePath, profilesPath, store, fsops.NewLocal())
+	err := svc.DeleteActiveProfile("ProfileAlpha")
+	if !errors.Is(err, ErrCannotDeleteActiveProfile) {
+		t.Fatalf("expected ErrCannotDeleteActiveProfile, got %v", err)
+	}
+}
+
+func TestDeleteActiveProfileRestoresFolderWhenCleanupFails(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	saveGamePath := filepath.Join(root, "SaveGame")
+	profilesPath := filepath.Join(saveGamePath, "Profiles")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "savegame"), "slot.sav", "alpha-save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileAlpha", "wraps"), "wrap.txt", "alpha-wrap")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileBeta", "savegame"), "slot.sav", "beta-save")
+	createDirWithFile(t, filepath.Join(profilesPath, "ProfileBeta", "wraps"), "wrap.txt", "beta-wrap")
+
+	store := marker.NewStore(saveGamePath)
+	if err := store.WriteActiveProfile("ProfileAlpha"); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	svc := NewService(saveGamePath, profilesPath, store, &failDeleteActiveCleanupOps{base: fsops.NewLocal()})
+	err := svc.DeleteActiveProfile("ProfileBeta")
+	if err == nil {
+		t.Fatal("expected delete active profile to fail during cleanup")
+	}
+
+	if _, err := os.Stat(filepath.Join(profilesPath, "ProfileAlpha")); err != nil {
+		t.Fatalf("expected original active profile restored, got %v", err)
+	}
+
+	active, err := store.ReadActiveProfile()
+	if err != nil {
+		t.Fatalf("read active marker: %v", err)
+	}
+
+	if active != "ProfileBeta" {
+		t.Fatalf("expected active marker ProfileBeta after successful switch, got %q", active)
+	}
+}
+
 func TestRenameProfileRollsBackFolderWhenMarkerWriteFails(t *testing.T) {
 	t.Parallel()
 
@@ -496,5 +594,25 @@ func (f *failOnSecondReplaceLifecycleOps) ReplaceDir(source string, destination 
 }
 
 func (f *failOnSecondReplaceLifecycleOps) RemoveDir(path string) error {
+	return f.base.RemoveDir(path)
+}
+
+type failDeleteActiveCleanupOps struct {
+	base *fsops.Local
+}
+
+func (f *failDeleteActiveCleanupOps) CopyDir(source string, destination string) error {
+	return f.base.CopyDir(source, destination)
+}
+
+func (f *failDeleteActiveCleanupOps) ReplaceDir(source string, destination string) error {
+	return f.base.ReplaceDir(source, destination)
+}
+
+func (f *failDeleteActiveCleanupOps) RemoveDir(path string) error {
+	if strings.HasPrefix(filepath.Base(path), "ProfileAlpha.delete-") {
+		return errors.New("forced delete cleanup failure")
+	}
+
 	return f.base.RemoveDir(path)
 }

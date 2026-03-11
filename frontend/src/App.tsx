@@ -5,6 +5,7 @@ import {EventsOn, Quit} from '../wailsjs/runtime/runtime';
 import {
     CheckForUpdates,
     CreateMarkerFile,
+    DeleteActiveProfile,
     DeleteProfile,
     GetAppVersion,
     GetLanguage,
@@ -348,6 +349,7 @@ function App() {
     const [renameTarget, setRenameTarget] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+    const [deleteReplacementTarget, setDeleteReplacementTarget] = useState('');
     const [markerDialogProfile, setMarkerDialogProfile] = useState('');
     const [diagnosticsModal, setDiagnosticsModal] = useState<DiagnosticsQuickAction | null>(null);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -393,8 +395,13 @@ function App() {
     const canImportBundle = resolvedImportTarget !== '' && importBundlePath.trim() !== '';
     const hasSelectedProfile = selectedProfileName.trim() !== '';
     const selectedIsActive = hasSelectedProfile && activeProfile.trim() !== '' && selectedProfileName.trim().toLowerCase() === activeProfile.trim().toLowerCase();
+    const deleteTargets = profiles;
     const deletableProfiles = profiles.filter((profile) => profile.name.trim().toLowerCase() !== activeProfile.trim().toLowerCase());
     const hasDeletableProfiles = deletableProfiles.length > 0;
+    const deleteRequiresReplacement = deleteTarget !== null && activeProfile.trim() !== '' && deleteTarget.trim().toLowerCase() === activeProfile.trim().toLowerCase();
+    const deleteReplacementOptions = deleteRequiresReplacement
+        ? profiles.filter((profile) => profile.name.trim().toLowerCase() !== deleteTarget.trim().toLowerCase())
+        : [];
     const saveGamePathHealthItem = healthReport?.items.find((item) => item.name === 'savegame_path') ?? null;
     const needsSaveGamePathFix = saveGamePathHealthItem ? !saveGamePathHealthItem.ok : false;
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
@@ -1275,21 +1282,28 @@ function App() {
     }
 
     function openDeleteModal(profileName?: string) {
-        if (!hasDeletableProfiles) {
+        const requested = (profileName || selectedProfileName).trim();
+        const fallback = requested !== ''
+            ? requested
+            : activeProfile.trim() || deleteTargets[0]?.name || '';
+
+        if (!fallback) {
             return;
         }
 
-        const requested = (profileName || '').trim();
-        const fallback = deletableProfiles[0]?.name ?? null;
-        const nextTarget = requested && deletableProfiles.some((profile) => profile.name === requested)
+        const nextTarget = requested && deleteTargets.some((profile) => profile.name === requested)
             ? requested
             : fallback;
 
+        const replacementFallback = profiles.find((profile) => profile.name.trim().toLowerCase() !== nextTarget.trim().toLowerCase())?.name ?? '';
+
         setDeleteTarget(nextTarget);
+        setDeleteReplacementTarget(replacementFallback);
     }
 
     function closeDeleteModal() {
         setDeleteTarget(null);
+        setDeleteReplacementTarget('');
     }
 
     function openDiagnosticsModal(action: DiagnosticsQuickAction) {
@@ -1422,13 +1436,35 @@ function App() {
             return;
         }
 
+        const target = deleteTarget.trim();
+        const replacement = deleteReplacementTarget.trim();
+        const isDeletingActive = activeProfile.trim() !== '' && target.toLowerCase() === activeProfile.trim().toLowerCase();
+
+        if (isDeletingActive && (!replacement || replacement.toLowerCase() === target.toLowerCase())) {
+            setStatus(t('status.chooseDeleteReplacement'));
+            return;
+        }
+
         try {
             setIsLoading(true);
-            setStatus(t('status.deletingProfile', {name: deleteTarget}));
             setRecoveryHint('');
-            await DeleteProfile(deleteTarget);
+
+            if (isDeletingActive) {
+                setStatus(t('status.deletingActiveProfile', {name: target, next: replacement}));
+                await DeleteActiveProfile(replacement);
+            } else {
+                setStatus(t('status.deletingProfile', {name: target}));
+                await DeleteProfile(target);
+            }
+
             await loadData();
-            setStatus(t('status.profileDeleted', {name: deleteTarget}));
+
+            if (isDeletingActive) {
+                setStatus(t('status.activeProfileDeleted', {name: target, next: replacement}));
+            } else {
+                setStatus(t('status.profileDeleted', {name: target}));
+            }
+
             closeDeleteModal();
         } catch (error) {
             const feedback = toErrorFeedback(error, t('error.delete'), t);
@@ -1848,8 +1884,9 @@ function App() {
                                 <button
                                     className="switch-btn danger"
                                     onClick={() => openDeleteModal(selectedProfileName)}
-                                    disabled={isLoading || isModalOpen || !hasDeletableProfiles}
+                                    disabled={isLoading || isModalOpen || !hasSelectedProfile || (selectedIsActive && !hasDeletableProfiles)}
                                     aria-label={t('profiles.deleteSelectedAria')}
+                                    title={selectedIsActive && !hasDeletableProfiles ? t('profiles.deleteOnlyProfileHint') : undefined}
                                 >
                                     <Trash2 size={13} strokeWidth={2.1} />
                                     {t('common.delete')}
@@ -2426,17 +2463,21 @@ function App() {
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title" aria-describedby="delete-modal-description">
                     <div className="modal-card danger delete-modal-card" onClick={(event) => event.stopPropagation()}>
                         <h3 id="delete-modal-title">{t('modal.delete.title')}</h3>
-                        <p id="delete-modal-description">{t('modal.delete.description', {name: deleteTarget})}</p>
-                        {deletableProfiles.length > 1 && (
+                        <p id="delete-modal-description">
+                            {deleteRequiresReplacement
+                                ? t('modal.delete.activeDescription', {name: deleteTarget})
+                                : t('modal.delete.description', {name: deleteTarget})}
+                        </p>
+                        {deleteRequiresReplacement && (
                             <>
-                                <label className="field-label" htmlFor="delete-profile-modal-select">{t('modal.delete.label')}</label>
+                                <label className="field-label" htmlFor="delete-replacement-modal-select">{t('modal.delete.replacementLabel')}</label>
                                 <select
-                                    id="delete-profile-modal-select"
-                                    value={deleteTarget}
-                                    onChange={(event) => setDeleteTarget(event.target.value)}
+                                    id="delete-replacement-modal-select"
+                                    value={deleteReplacementTarget}
+                                    onChange={(event) => setDeleteReplacementTarget(event.target.value)}
                                     disabled={isLoading}
                                 >
-                                    {deletableProfiles.map((profile) => (
+                                    {deleteReplacementOptions.map((profile) => (
                                         <option key={profile.name} value={profile.name}>
                                             {profile.name}
                                         </option>
