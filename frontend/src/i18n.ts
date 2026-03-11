@@ -20,7 +20,6 @@ const translations: Record<Locale, Record<string, string>> = {
         'common.close': 'Close',
         'common.closeForNow': 'Close for now',
         'common.browse': 'Browse...',
-        'common.switch': 'Switch',
         'common.rename': 'Rename',
         'common.delete': 'Delete',
         'common.show': 'Show',
@@ -102,7 +101,6 @@ const translations: Record<Locale, Record<string, string>> = {
         'profiles.selectProfile': 'Select profile',
         'profiles.noActiveProfileSelected': 'No active profile selected',
         'profiles.activeTag': 'ACTIVE',
-        'profiles.switchSelectedAria': 'Switch selected profile',
         'profiles.renameSelectedAria': 'Rename selected profile',
         'profiles.deleteSelectedAria': 'Delete selected profile',
         'profiles.empty': 'No profiles found in the Profiles folder.',
@@ -307,6 +305,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
         'modal.delete.title': 'Delete Profile',
         'modal.delete.description': 'Delete {name}? This action cannot be undone.',
+        'modal.delete.label': 'Profile to delete',
 
         'aria.appVersion': 'Current app version',
     },
@@ -323,7 +322,6 @@ const translations: Record<Locale, Record<string, string>> = {
         'common.close': 'Cerrar',
         'common.closeForNow': 'Cerrar por ahora',
         'common.browse': 'Buscar...',
-        'common.switch': 'Cambiar',
         'common.rename': 'Renombrar',
         'common.delete': 'Eliminar',
         'common.show': 'Mostrar',
@@ -405,7 +403,6 @@ const translations: Record<Locale, Record<string, string>> = {
         'profiles.selectProfile': 'Seleccionar perfil',
         'profiles.noActiveProfileSelected': 'No hay perfil activo seleccionado',
         'profiles.activeTag': 'ACTIVO',
-        'profiles.switchSelectedAria': 'Cambiar perfil seleccionado',
         'profiles.renameSelectedAria': 'Renombrar perfil seleccionado',
         'profiles.deleteSelectedAria': 'Eliminar perfil seleccionado',
         'profiles.empty': 'No se encontraron perfiles en la carpeta Profiles.',
@@ -610,6 +607,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
         'modal.delete.title': 'Eliminar perfil',
         'modal.delete.description': 'Eliminar {name}? Esta accion no se puede deshacer.',
+        'modal.delete.label': 'Perfil a eliminar',
 
         'aria.appVersion': 'Version actual de la app',
     },

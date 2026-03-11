@@ -393,6 +393,8 @@ function App() {
     const canImportBundle = resolvedImportTarget !== '' && importBundlePath.trim() !== '';
     const hasSelectedProfile = selectedProfileName.trim() !== '';
     const selectedIsActive = hasSelectedProfile && activeProfile.trim() !== '' && selectedProfileName.trim().toLowerCase() === activeProfile.trim().toLowerCase();
+    const deletableProfiles = profiles.filter((profile) => profile.name.trim().toLowerCase() !== activeProfile.trim().toLowerCase());
+    const hasDeletableProfiles = deletableProfiles.length > 0;
     const saveGamePathHealthItem = healthReport?.items.find((item) => item.name === 'savegame_path') ?? null;
     const needsSaveGamePathFix = saveGamePathHealthItem ? !saveGamePathHealthItem.ok : false;
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
@@ -1005,6 +1007,8 @@ function App() {
     }
 
     async function onSwitch(profileName: string) {
+        const previousActive = activeProfile.trim();
+
         try {
             setStatus(t('status.switchingProfile', {name: profileName}));
             setIsLoading(true);
@@ -1017,6 +1021,7 @@ function App() {
             const feedback = toErrorFeedback(error, t('error.switch'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
+            setSelectedProfileName(previousActive);
         } finally {
             setIsLoading(false);
         }
@@ -1024,15 +1029,7 @@ function App() {
 
     function closeSwitchConfirmModal() {
         setSwitchConfirmProfile(null);
-    }
-
-    function openSwitchConfirmModal(profileName: string) {
-        const nextProfile = profileName.trim();
-        if (!nextProfile || nextProfile.toLowerCase() === activeProfile.trim().toLowerCase()) {
-            return;
-        }
-
-        setSwitchConfirmProfile(nextProfile);
+        setSelectedProfileName(activeProfile.trim());
     }
 
     async function confirmSwitchProfileFromModal() {
@@ -1277,8 +1274,18 @@ function App() {
         }
     }
 
-    function openDeleteModal(profileName: string) {
-        setDeleteTarget(profileName);
+    function openDeleteModal(profileName?: string) {
+        if (!hasDeletableProfiles) {
+            return;
+        }
+
+        const requested = (profileName || '').trim();
+        const fallback = deletableProfiles[0]?.name ?? null;
+        const nextTarget = requested && deletableProfiles.some((profile) => profile.name === requested)
+            ? requested
+            : fallback;
+
+        setDeleteTarget(nextTarget);
     }
 
     function closeDeleteModal() {
@@ -1806,6 +1813,10 @@ function App() {
                                             }
 
                                             setSelectedProfileName(next);
+
+                                            if (next.trim().toLowerCase() !== activeProfile.trim().toLowerCase()) {
+                                                setSwitchConfirmProfile(next);
+                                            }
                                         }}
                                         disabled={isLoading || isModalOpen}
                                         aria-label={t('profiles.selectAria')}
@@ -1826,15 +1837,6 @@ function App() {
                                     )}
                                 </div>
                                 <button
-                                    className="switch-btn"
-                                    onClick={() => openSwitchConfirmModal(selectedProfileName)}
-                                    disabled={isLoading || isModalOpen || !hasSelectedProfile || selectedIsActive}
-                                    aria-label={t('profiles.switchSelectedAria')}
-                                >
-                                    <RefreshCw size={13} strokeWidth={2.1} />
-                                    {t('common.switch')}
-                                </button>
-                                <button
                                     className="switch-btn secondary"
                                     onClick={() => openRenameModal(selectedProfileName)}
                                     disabled={isLoading || isModalOpen || !hasSelectedProfile}
@@ -1846,7 +1848,7 @@ function App() {
                                 <button
                                     className="switch-btn danger"
                                     onClick={() => openDeleteModal(selectedProfileName)}
-                                    disabled={isLoading || isModalOpen || !hasSelectedProfile || selectedIsActive}
+                                    disabled={isLoading || isModalOpen || !hasDeletableProfiles}
                                     aria-label={t('profiles.deleteSelectedAria')}
                                 >
                                     <Trash2 size={13} strokeWidth={2.1} />
@@ -2422,9 +2424,26 @@ function App() {
 
             {deleteTarget && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title" aria-describedby="delete-modal-description">
-                    <div className="modal-card danger" onClick={(event) => event.stopPropagation()}>
+                    <div className="modal-card danger delete-modal-card" onClick={(event) => event.stopPropagation()}>
                         <h3 id="delete-modal-title">{t('modal.delete.title')}</h3>
                         <p id="delete-modal-description">{t('modal.delete.description', {name: deleteTarget})}</p>
+                        {deletableProfiles.length > 1 && (
+                            <>
+                                <label className="field-label" htmlFor="delete-profile-modal-select">{t('modal.delete.label')}</label>
+                                <select
+                                    id="delete-profile-modal-select"
+                                    value={deleteTarget}
+                                    onChange={(event) => setDeleteTarget(event.target.value)}
+                                    disabled={isLoading}
+                                >
+                                    {deletableProfiles.map((profile) => (
+                                        <option key={profile.name} value={profile.name}>
+                                            {profile.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </>
+                        )}
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeDeleteModal} disabled={isLoading}>
                                 {t('common.cancel')}

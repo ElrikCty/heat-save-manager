@@ -630,7 +630,6 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
 .profile-toolbar {
     display: flex;
     gap: 0.54rem;
-    flex-wrap: wrap;
     align-items: center;
     margin-top: 0.42rem;
 }
@@ -1346,6 +1345,12 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
 .modal-actions .switch-btn,
 .modal-actions .action-btn {
     min-height: 2.2rem;
+}
+
+.delete-modal-card select {
+    width: 100%;
+    min-height: 2.3rem;
+    border-radius: 10px;
 }
 
 .export-modal-card .field-label {
