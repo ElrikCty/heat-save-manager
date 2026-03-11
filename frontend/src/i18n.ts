@@ -103,7 +103,6 @@ const translations: Record<Locale, Record<string, string>> = {
         'profiles.activeTag': 'ACTIVE',
         'profiles.renameSelectedAria': 'Rename selected profile',
         'profiles.deleteSelectedAria': 'Delete selected profile',
-        'profiles.deleteOnlyProfileHint': 'Create another profile before deleting the active one.',
         'profiles.empty': 'No profiles found in the Profiles folder.',
         'profiles.emptyHint': 'Create one with Start New Save to begin.',
         'profiles.selectAria': 'Select profile',
@@ -308,9 +307,12 @@ const translations: Record<Locale, Record<string, string>> = {
         'modal.rename.description': 'Choose a new name for {name}.',
 
         'modal.delete.title': 'Delete Profile',
-        'modal.delete.description': 'Delete {name}? This action cannot be undone.',
+        'modal.delete.description': 'Choose which profile to delete.',
+        'modal.delete.label': 'Profile to delete',
+        'modal.delete.confirmation': 'Delete {name}? This action cannot be undone.',
         'modal.delete.activeDescription': 'Delete active profile {name}? Choose which profile becomes active next. This action cannot be undone.',
         'modal.delete.replacementLabel': 'Next active profile',
+        'modal.delete.onlyProfileHint': 'Create another profile before deleting the active one.',
 
         'aria.appVersion': 'Current app version',
     },
@@ -410,7 +412,6 @@ const translations: Record<Locale, Record<string, string>> = {
         'profiles.activeTag': 'ACTIVO',
         'profiles.renameSelectedAria': 'Renombrar perfil seleccionado',
         'profiles.deleteSelectedAria': 'Eliminar perfil seleccionado',
-        'profiles.deleteOnlyProfileHint': 'Crea otro perfil antes de eliminar el perfil activo.',
         'profiles.empty': 'No se encontraron perfiles en la carpeta Profiles.',
         'profiles.emptyHint': 'Crea uno con Iniciar nueva partida para comenzar.',
         'profiles.selectAria': 'Seleccionar perfil',
@@ -615,9 +616,12 @@ const translations: Record<Locale, Record<string, string>> = {
         'modal.rename.description': 'Elige un nombre nuevo para {name}.',
 
         'modal.delete.title': 'Eliminar perfil',
-        'modal.delete.description': 'Eliminar {name}? Esta accion no se puede deshacer.',
+        'modal.delete.description': 'Elige que perfil deseas eliminar.',
+        'modal.delete.label': 'Perfil a eliminar',
+        'modal.delete.confirmation': 'Eliminar {name}? Esta accion no se puede deshacer.',
         'modal.delete.activeDescription': 'Eliminar el perfil activo {name}? Elige que perfil quedara activo despues. Esta accion no se puede deshacer.',
         'modal.delete.replacementLabel': 'Siguiente perfil activo',
+        'modal.delete.onlyProfileHint': 'Crea otro perfil antes de eliminar el perfil activo.',
 
         'aria.appVersion': 'Version actual de la app',
     },

@@ -397,11 +397,11 @@ function App() {
     const selectedIsActive = hasSelectedProfile && activeProfile.trim() !== '' && selectedProfileName.trim().toLowerCase() === activeProfile.trim().toLowerCase();
     const deleteTargets = profiles;
     const deletableProfiles = profiles.filter((profile) => profile.name.trim().toLowerCase() !== activeProfile.trim().toLowerCase());
-    const hasDeletableProfiles = deletableProfiles.length > 0;
     const deleteRequiresReplacement = deleteTarget !== null && activeProfile.trim() !== '' && deleteTarget.trim().toLowerCase() === activeProfile.trim().toLowerCase();
     const deleteReplacementOptions = deleteRequiresReplacement
         ? profiles.filter((profile) => profile.name.trim().toLowerCase() !== deleteTarget.trim().toLowerCase())
         : [];
+    const canConfirmDelete = deleteTarget !== null && (!deleteRequiresReplacement || (deleteReplacementTarget.trim() !== '' && deleteReplacementTarget.trim().toLowerCase() !== deleteTarget.trim().toLowerCase()));
     const saveGamePathHealthItem = healthReport?.items.find((item) => item.name === 'savegame_path') ?? null;
     const needsSaveGamePathFix = saveGamePathHealthItem ? !saveGamePathHealthItem.ok : false;
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
@@ -1281,24 +1281,29 @@ function App() {
         }
     }
 
+    function getDeleteReplacementFallback(targetName: string) {
+        return profiles.find((profile) => profile.name.trim().toLowerCase() !== targetName.trim().toLowerCase())?.name ?? '';
+    }
+
+    function setDeleteTargetWithDefaults(profileName: string) {
+        const nextTarget = profileName.trim();
+        setDeleteTarget(nextTarget || null);
+        setDeleteReplacementTarget(nextTarget ? getDeleteReplacementFallback(nextTarget) : '');
+    }
+
     function openDeleteModal(profileName?: string) {
         const requested = (profileName || selectedProfileName).trim();
-        const fallback = requested !== ''
-            ? requested
-            : activeProfile.trim() || deleteTargets[0]?.name || '';
+        const fallback = deletableProfiles[0]?.name || requested || activeProfile.trim() || deleteTargets[0]?.name || '';
 
         if (!fallback) {
             return;
         }
 
-        const nextTarget = requested && deleteTargets.some((profile) => profile.name === requested)
+        const nextTarget = requested && requested.toLowerCase() !== activeProfile.trim().toLowerCase() && deleteTargets.some((profile) => profile.name === requested)
             ? requested
             : fallback;
 
-        const replacementFallback = profiles.find((profile) => profile.name.trim().toLowerCase() !== nextTarget.trim().toLowerCase())?.name ?? '';
-
-        setDeleteTarget(nextTarget);
-        setDeleteReplacementTarget(replacementFallback);
+        setDeleteTargetWithDefaults(nextTarget);
     }
 
     function closeDeleteModal() {
@@ -1884,9 +1889,8 @@ function App() {
                                 <button
                                     className="switch-btn danger"
                                     onClick={() => openDeleteModal(selectedProfileName)}
-                                    disabled={isLoading || isModalOpen || !hasSelectedProfile || (selectedIsActive && !hasDeletableProfiles)}
+                                    disabled={isLoading || isModalOpen || !hasSelectedProfile}
                                     aria-label={t('profiles.deleteSelectedAria')}
-                                    title={selectedIsActive && !hasDeletableProfiles ? t('profiles.deleteOnlyProfileHint') : undefined}
                                 >
                                     <Trash2 size={13} strokeWidth={2.1} />
                                     {t('common.delete')}
@@ -2463,33 +2467,51 @@ function App() {
                 <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title" aria-describedby="delete-modal-description">
                     <div className="modal-card danger delete-modal-card" onClick={(event) => event.stopPropagation()}>
                         <h3 id="delete-modal-title">{t('modal.delete.title')}</h3>
-                        <p id="delete-modal-description">
-                            {deleteRequiresReplacement
-                                ? t('modal.delete.activeDescription', {name: deleteTarget})
-                                : t('modal.delete.description', {name: deleteTarget})}
-                        </p>
-                        {deleteRequiresReplacement && (
+                        <p id="delete-modal-description">{t('modal.delete.description')}</p>
+                        <label className="field-label" htmlFor="delete-profile-modal-select">{t('modal.delete.label')}</label>
+                        <select
+                            id="delete-profile-modal-select"
+                            value={deleteTarget}
+                            onChange={(event) => setDeleteTargetWithDefaults(event.target.value)}
+                            disabled={isLoading}
+                        >
+                            {deleteTargets.map((profile) => (
+                                <option key={profile.name} value={profile.name}>
+                                    {profile.name}{profile.name.trim().toLowerCase() === activeProfile.trim().toLowerCase() ? ` (${t('profiles.activeTag')})` : ''}
+                                </option>
+                            ))}
+                        </select>
+                        {deleteRequiresReplacement ? (
                             <>
-                                <label className="field-label" htmlFor="delete-replacement-modal-select">{t('modal.delete.replacementLabel')}</label>
-                                <select
-                                    id="delete-replacement-modal-select"
-                                    value={deleteReplacementTarget}
-                                    onChange={(event) => setDeleteReplacementTarget(event.target.value)}
-                                    disabled={isLoading}
-                                >
-                                    {deleteReplacementOptions.map((profile) => (
-                                        <option key={profile.name} value={profile.name}>
-                                            {profile.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                <p className="modal-note">{t('modal.delete.activeDescription', {name: deleteTarget})}</p>
+                                {deleteReplacementOptions.length > 0 ? (
+                                    <>
+                                        <label className="field-label" htmlFor="delete-replacement-modal-select">{t('modal.delete.replacementLabel')}</label>
+                                        <select
+                                            id="delete-replacement-modal-select"
+                                            value={deleteReplacementTarget}
+                                            onChange={(event) => setDeleteReplacementTarget(event.target.value)}
+                                            disabled={isLoading}
+                                        >
+                                            {deleteReplacementOptions.map((profile) => (
+                                                <option key={profile.name} value={profile.name}>
+                                                    {profile.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </>
+                                ) : (
+                                    <p className="modal-note">{t('modal.delete.onlyProfileHint')}</p>
+                                )}
                             </>
+                        ) : (
+                            <p className="modal-note">{t('modal.delete.confirmation', {name: deleteTarget})}</p>
                         )}
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeDeleteModal} disabled={isLoading}>
                                 {t('common.cancel')}
                             </button>
-                            <button className="switch-btn danger" onClick={() => void confirmDeleteProfile()} disabled={isLoading}>
+                            <button className="switch-btn danger" onClick={() => void confirmDeleteProfile()} disabled={isLoading || !canConfirmDelete}>
                                 {t('common.delete')}
                             </button>
                         </div>
