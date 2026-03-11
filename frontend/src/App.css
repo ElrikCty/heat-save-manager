@@ -635,62 +635,30 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
 }
 
 .profile-select-wrap {
-    position: relative;
     flex: 1;
     min-width: 0;
     margin-right: 0.14rem;
 }
 
-.profile-select-wrap select {
+.profile-select-wrap .themed-select-trigger {
     height: 2.5rem;
     padding-left: 0.86rem;
-    padding-right: 2.45rem;
+    padding-right: 0.82rem;
     background: linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
     border-color: rgba(255, 255, 255, 0.11);
     font-size: 0.86rem;
     font-weight: 500;
     color: rgba(239, 245, 255, 0.92);
     border-radius: 999px;
-    appearance: none;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.profile-select-wrap select:focus {
+.profile-select-wrap .themed-select-trigger:focus-visible {
     border-color: rgba(255, 127, 31, 0.42);
     box-shadow: 0 0 0 2px rgba(255, 127, 31, 0.15);
 }
 
-.profile-select-wrap::after {
-    content: '▾';
-    position: absolute;
-    right: 0.82rem;
-    top: 50%;
-    transform: translateY(-52%);
-    color: rgba(174, 193, 219, 0.52);
-    font-size: 0.84rem;
-    pointer-events: none;
-}
-
-.profile-select-wrap select.has-active-tag {
-    padding-right: 2.45rem;
-}
-
-.profile-active-tag {
-    position: absolute;
-    left: 3.95rem;
-    margin-left: 0.64rem;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 0.6rem;
-    font-weight: 500;
-    letter-spacing: 0;
-    color: #ffb565;
-    border: none;
-    background: rgba(255, 132, 40, 0.32);
-    padding: 0.22rem 0.52rem;
-    border-radius: 3px;
-    line-height: 1;
-    pointer-events: none;
+.profile-select-wrap .themed-select-trigger-content {
+    gap: 0.56rem;
 }
 
 .profile-toolbar .switch-btn {
@@ -1347,8 +1315,7 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     min-height: 2.2rem;
 }
 
-.delete-modal-card select {
-    width: 100%;
+.delete-modal-card .themed-select-trigger {
     min-height: 2.3rem;
     border-radius: 10px;
 }
@@ -1358,7 +1325,7 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     font-size: 0.8rem;
 }
 
-.export-modal-card select {
+.export-modal-card .themed-select-trigger {
     min-height: 2.3rem;
     border-radius: 10px;
 }
@@ -1410,7 +1377,7 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     margin-top: 0.14rem;
 }
 
-.import-modal-card select,
+.import-modal-card .themed-select-trigger,
 .import-modal-card input {
     min-height: 2.3rem;
     border-radius: 10px;
