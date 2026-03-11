@@ -1347,6 +1347,12 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     min-height: 2.2rem;
 }
 
+.delete-modal-card select {
+    width: 100%;
+    min-height: 2.3rem;
+    border-radius: 10px;
+}
+
 .export-modal-card .field-label {
     margin: 0 0 0.36rem;
     font-size: 0.8rem;

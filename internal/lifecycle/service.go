@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"heat-save-manager/internal/fsops"
+	"heat-save-manager/internal/switcher"
 )
 
 var (
@@ -247,6 +248,83 @@ func (s *Service) DeleteProfile(profileName string) error {
 	}
 
 	return s.ops.RemoveDir(profilePath)
+}
+
+func (s *Service) DeleteActiveProfile(replacementProfileName string) error {
+	if err := s.validateDependencies(); err != nil {
+		return err
+	}
+
+	active, err := s.marker.ReadActiveProfile()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ErrActiveProfileRequired
+		}
+
+		return err
+	}
+
+	activeName, err := validateProfileName(active)
+	if err != nil {
+		return ErrActiveProfileRequired
+	}
+
+	replacementName, err := validateProfileName(replacementProfileName)
+	if err != nil {
+		return err
+	}
+
+	if strings.EqualFold(activeName, replacementName) {
+		return ErrCannotDeleteActiveProfile
+	}
+
+	activePath := filepath.Join(s.profilesPath, activeName)
+	if err := ensureDirExists(activePath); err != nil {
+		if os.IsNotExist(err) {
+			return ErrProfileNotFound
+		}
+		return err
+	}
+
+	replacementPath := filepath.Join(s.profilesPath, replacementName)
+	if err := ensureDirExists(replacementPath); err != nil {
+		if os.IsNotExist(err) {
+			return ErrProfileNotFound
+		}
+		return err
+	}
+
+	stagingPath, err := os.MkdirTemp(s.profilesPath, activeName+".delete-*")
+	if err != nil {
+		return err
+	}
+
+	if err := os.Remove(stagingPath); err != nil {
+		return err
+	}
+
+	if err := os.Rename(activePath, stagingPath); err != nil {
+		return err
+	}
+
+	switchService := switcher.NewService(s.saveGamePath, s.profilesPath, s.marker, s.ops)
+	if _, err := switchService.Switch(switcher.Params{ProfileName: replacementName}); err != nil {
+		if rollbackErr := os.Rename(stagingPath, activePath); rollbackErr != nil {
+			return fmt.Errorf("delete active profile switch failed: %w; rollback failed: %v", err, rollbackErr)
+		}
+
+		return err
+	}
+
+	if err := s.ops.RemoveDir(stagingPath); err != nil {
+		if rollbackErr := os.Rename(stagingPath, activePath); rollbackErr != nil {
+			return fmt.Errorf("delete active profile cleanup failed: %w; restore failed: %v", err, rollbackErr)
+		}
+
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) resolveProfileName(profileName string) (string, error) {
