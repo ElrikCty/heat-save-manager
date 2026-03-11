@@ -109,6 +109,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
         'saveActions.title': 'Save Actions',
         'saveActions.startNewTitle': 'Start New Save',
+        'saveActions.startNewDescription': 'Create a fresh active profile with empty savegame and wraps folders.',
         'saveActions.newProfilePlaceholder': 'New profile name',
         'saveActions.startNewButton': 'Start New Save',
         'saveActions.saveCurrentTitle': 'Save Current Progress',
@@ -252,13 +253,16 @@ const translations: Record<Locale, Record<string, string>> = {
         'modal.savePath.applying': 'Applying...',
 
         'modal.freshConfirm.title': 'Start New Save',
-        'modal.freshConfirm.description': 'Do you want to save your current progress into {active} before starting fresh with {fresh}?',
+        'modal.freshConfirm.description': 'Do you want to save your current progress into {active} before starting a new save?',
         'modal.freshConfirm.defaultActive': 'your active profile',
         'modal.freshConfirm.saveUnavailable': 'Save first is unavailable until you set an active profile in Diagnostics.',
         'modal.freshConfirm.nameConflict': 'Choose a different fresh profile name to keep your current active profile backup separate.',
         'modal.freshConfirm.note': 'Saving first updates your active profile backup with current savegame and wraps. Skipping starts fresh and discards the current root progress.',
         'modal.freshConfirm.skipSave': 'Skip save',
         'modal.freshConfirm.saveFirst': 'Save first',
+        'modal.freshName.title': 'New Profile Name',
+        'modal.freshName.description': 'Enter the name for the new fresh profile. It will become the active profile with empty savegame and wraps folders.',
+        'modal.freshName.label': 'New profile name',
 
         'modal.switch.title': 'Switch Active Profile',
         'modal.switch.description': 'Switch active profile from {current} to {next}?',
@@ -405,6 +409,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
         'saveActions.title': 'Acciones de guardado',
         'saveActions.startNewTitle': 'Iniciar nueva partida',
+        'saveActions.startNewDescription': 'Crea un perfil activo nuevo con las carpetas savegame y wraps vacias.',
         'saveActions.newProfilePlaceholder': 'Nombre del nuevo perfil',
         'saveActions.startNewButton': 'Iniciar nueva partida',
         'saveActions.saveCurrentTitle': 'Guardar progreso actual',
@@ -548,13 +553,16 @@ const translations: Record<Locale, Record<string, string>> = {
         'modal.savePath.applying': 'Aplicando...',
 
         'modal.freshConfirm.title': 'Iniciar nueva partida',
-        'modal.freshConfirm.description': 'Quieres guardar el progreso actual en {active} antes de empezar en limpio con {fresh}?',
+        'modal.freshConfirm.description': 'Quieres guardar el progreso actual en {active} antes de iniciar una nueva partida?',
         'modal.freshConfirm.defaultActive': 'tu perfil activo',
         'modal.freshConfirm.saveUnavailable': 'Guardar primero no esta disponible hasta definir un perfil activo en Diagnosticos.',
         'modal.freshConfirm.nameConflict': 'Elige otro nombre para mantener separado el respaldo del perfil activo.',
         'modal.freshConfirm.note': 'Guardar primero actualiza el respaldo del perfil activo con savegame y wraps actuales. Omitir empieza en limpio y descarta el progreso actual de la raiz.',
         'modal.freshConfirm.skipSave': 'Omitir guardado',
         'modal.freshConfirm.saveFirst': 'Guardar primero',
+        'modal.freshName.title': 'Nombre del nuevo perfil',
+        'modal.freshName.description': 'Ingresa el nombre del nuevo perfil limpio. Quedara como perfil activo con las carpetas savegame y wraps vacias.',
+        'modal.freshName.label': 'Nombre del nuevo perfil',
 
         'modal.switch.title': 'Cambiar perfil activo',
         'modal.switch.description': 'Cambiar perfil activo de {current} a {next}?',
