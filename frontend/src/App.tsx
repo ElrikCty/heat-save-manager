@@ -29,6 +29,7 @@ import {
     RunHealthCheck,
 } from '../wailsjs/go/main/App';
 import {createTranslator, type Locale, normalizeLocale, type Translator} from './i18n';
+import ThemedSelect, {type ThemedSelectOption} from './components/ThemedSelect';
 
 type Profile = {
     name: string;
@@ -393,14 +394,35 @@ function App() {
     const canExportBundle = exportProfileName.trim() !== '';
     const resolvedImportTarget = importTargetProfile === NEW_PROFILE_OPTION ? importTargetNewName.trim() : importTargetProfile.trim();
     const canImportBundle = resolvedImportTarget !== '' && importBundlePath.trim() !== '';
+    const activeProfileKey = activeProfile.trim().toLowerCase();
     const hasSelectedProfile = selectedProfileName.trim() !== '';
-    const selectedIsActive = hasSelectedProfile && activeProfile.trim() !== '' && selectedProfileName.trim().toLowerCase() === activeProfile.trim().toLowerCase();
+    const profileSelectOptions = useMemo<ThemedSelectOption[]>(() => profiles.map((profile) => ({
+        value: profile.name,
+        label: profile.name,
+        tag: profile.name.trim().toLowerCase() === activeProfileKey ? t('profiles.activeTag') : undefined,
+    })), [profiles, activeProfileKey, t]);
     const deleteTargets = profiles;
-    const deletableProfiles = profiles.filter((profile) => profile.name.trim().toLowerCase() !== activeProfile.trim().toLowerCase());
-    const deleteRequiresReplacement = deleteTarget !== null && activeProfile.trim() !== '' && deleteTarget.trim().toLowerCase() === activeProfile.trim().toLowerCase();
+    const saveDestinationOptions = useMemo<ThemedSelectOption[]>(() => [
+        ...profileSelectOptions,
+        {value: NEW_PROFILE_OPTION, label: t('saveActions.createNewProfileOption')},
+    ], [profileSelectOptions, t]);
+    const exportProfileOptions = useMemo<ThemedSelectOption[]>(() => profiles.length === 0
+        ? [{value: '', label: t('modal.export.none'), disabled: true}]
+        : profileSelectOptions,
+    [profileSelectOptions, profiles.length, t]);
+    const importTargetOptions = useMemo<ThemedSelectOption[]>(() => [
+        ...profileSelectOptions,
+        {value: NEW_PROFILE_OPTION, label: t('saveActions.createNewProfileOption')},
+    ], [profileSelectOptions, t]);
+    const deletableProfiles = profiles.filter((profile) => profile.name.trim().toLowerCase() !== activeProfileKey);
+    const deleteRequiresReplacement = deleteTarget !== null && activeProfileKey !== '' && deleteTarget.trim().toLowerCase() === activeProfileKey;
     const deleteReplacementOptions = deleteRequiresReplacement
         ? profiles.filter((profile) => profile.name.trim().toLowerCase() !== deleteTarget.trim().toLowerCase())
         : [];
+    const deleteReplacementSelectOptions = useMemo<ThemedSelectOption[]>(() => deleteReplacementOptions.map((profile) => ({
+        value: profile.name,
+        label: profile.name,
+    })), [deleteReplacementOptions]);
     const canConfirmDelete = deleteTarget !== null && (!deleteRequiresReplacement || (deleteReplacementTarget.trim() !== '' && deleteReplacementTarget.trim().toLowerCase() !== deleteTarget.trim().toLowerCase()));
     const saveGamePathHealthItem = healthReport?.items.find((item) => item.name === 'savegame_path') ?? null;
     const needsSaveGamePathFix = saveGamePathHealthItem ? !saveGamePathHealthItem.ok : false;
@@ -1844,11 +1866,12 @@ function App() {
                         {profiles.length > 0 ? (
                             <div className="profile-toolbar">
                                 <div className="profile-select-wrap">
-                                    <select
-                                        className={selectedIsActive ? 'has-active-tag' : ''}
+                                    <ThemedSelect
+                                        variant="pill"
                                         value={selectedProfileName}
-                                        onChange={(event) => {
-                                            const next = event.target.value;
+                                        options={profileSelectOptions}
+                                        placeholder={activeProfile ? t('profiles.selectProfile') : t('profiles.noActiveProfileSelected')}
+                                        onChange={(next) => {
                                             if (!next) {
                                                 return;
                                             }
@@ -1861,21 +1884,7 @@ function App() {
                                         }}
                                         disabled={isLoading || isModalOpen}
                                         aria-label={t('profiles.selectAria')}
-                                    >
-                                        <option value="" disabled>
-                                            {activeProfile ? t('profiles.selectProfile') : t('profiles.noActiveProfileSelected')}
-                                        </option>
-                                        {profiles.map((profile) => (
-                                            <option key={profile.name} value={profile.name}>
-                                                {profile.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {selectedIsActive && (
-                                        <span className="profile-active-tag" style={{left: `calc(0.92rem + ${Math.min(selectedProfileName.length + 2, 16)}ch)`}}>
-                                            {t('profiles.activeTag')}
-                                        </span>
-                                    )}
+                                    />
                                 </div>
                                 <button
                                     className="switch-btn secondary"
@@ -1948,19 +1957,13 @@ function App() {
 
                             {saveDestinationMode === 'custom' && (
                                 <div className="save-destination-grid">
-                                    <select
+                                    <ThemedSelect
                                         id="save-profile-input"
                                         value={saveDestinationProfile}
-                                        onChange={(event) => setSaveDestinationProfile(event.target.value)}
+                                        options={saveDestinationOptions}
+                                        onChange={setSaveDestinationProfile}
                                         disabled={isLoading || isModalOpen}
-                                    >
-                                        {profiles.map((profile) => (
-                                            <option key={profile.name} value={profile.name}>
-                                                {profile.name}{profile.name === activeProfile ? t('saveActions.activeSuffix') : ''}
-                                            </option>
-                                        ))}
-                                        <option value={NEW_PROFILE_OPTION}>{t('saveActions.createNewProfileOption')}</option>
-                                    </select>
+                                    />
                                     {saveDestinationProfile === NEW_PROFILE_OPTION && (
                                         <input
                                             value={saveDestinationNewName}
@@ -2302,18 +2305,13 @@ function App() {
                                         {!activeProfile.trim() && (
                                             <p className="modal-note">{t('modal.diag.marker.noActiveDetected')}</p>
                                         )}
-                                        <select
+                                        <ThemedSelect
                                             value={markerDialogProfile}
-                                            onChange={(event) => setMarkerDialogProfile(event.target.value)}
+                                            options={profileSelectOptions}
+                                            onChange={setMarkerDialogProfile}
                                             disabled={isLoading}
                                             aria-label={t('modal.diag.marker.chooseActiveAria')}
-                                        >
-                                            {profiles.map((profile) => (
-                                                <option key={profile.name} value={profile.name}>
-                                                    {profile.name}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        />
                                         <p className="modal-note">{t('modal.diag.marker.selectedProfile', {name: markerDialogProfile || t('common.noneSelected')})}</p>
                                         <div className="modal-actions">
                                             <button className="switch-btn secondary" onClick={closeDiagnosticsModal} disabled={isLoading}>
@@ -2342,23 +2340,14 @@ function App() {
                         <h3 id="export-modal-title">{t('modal.export.title')}</h3>
                         <p id="export-modal-description">{t('modal.export.description')}</p>
                         <label className="field-label" htmlFor="export-profile-modal-input">{t('modal.export.label')}</label>
-                        <select
+                        <ThemedSelect
                             id="export-profile-modal-input"
                             value={exportProfileName}
-                            onChange={(event) => setExportProfileName(event.target.value)}
+                            options={exportProfileOptions}
+                            onChange={setExportProfileName}
                             disabled={isLoading}
                             autoFocus
-                        >
-                            {profiles.length === 0 ? (
-                                <option value="">{t('modal.export.none')}</option>
-                            ) : (
-                                profiles.map((profile) => (
-                                    <option key={profile.name} value={profile.name}>
-                                        {profile.name}
-                                    </option>
-                                ))
-                            )}
-                        </select>
+                        />
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeExportModal} disabled={isLoading}>
                                 {t('common.cancel')}
@@ -2379,25 +2368,18 @@ function App() {
                         <div className="import-modal-section">
                             <label className="field-label" htmlFor="import-profile-modal-input">{t('modal.import.label')}</label>
                             <div className="import-modal-destination">
-                                <select
+                                <ThemedSelect
                                     id="import-profile-modal-input"
                                     value={importTargetProfile}
-                                    onChange={(event) => {
-                                        const next = event.target.value;
+                                    options={importTargetOptions}
+                                    onChange={(next) => {
                                         setImportTargetProfile(next);
                                         if (next !== NEW_PROFILE_OPTION) {
                                             setImportTargetNewName('');
                                         }
                                     }}
                                     disabled={isLoading}
-                                >
-                                    {profiles.map((profile) => (
-                                        <option key={profile.name} value={profile.name}>
-                                            {profile.name}
-                                        </option>
-                                    ))}
-                                    <option value={NEW_PROFILE_OPTION}>{t('saveActions.createNewProfileOption')}</option>
-                                </select>
+                                />
                             </div>
                             {importTargetProfile === NEW_PROFILE_OPTION && (
                                 <div className="import-modal-destination import-modal-new-profile-row">
@@ -2469,36 +2451,26 @@ function App() {
                         <h3 id="delete-modal-title">{t('modal.delete.title')}</h3>
                         <p id="delete-modal-description">{t('modal.delete.description')}</p>
                         <label className="field-label" htmlFor="delete-profile-modal-select">{t('modal.delete.label')}</label>
-                        <select
+                        <ThemedSelect
                             id="delete-profile-modal-select"
                             value={deleteTarget}
-                            onChange={(event) => setDeleteTargetWithDefaults(event.target.value)}
+                            options={profileSelectOptions}
+                            onChange={setDeleteTargetWithDefaults}
                             disabled={isLoading}
-                        >
-                            {deleteTargets.map((profile) => (
-                                <option key={profile.name} value={profile.name}>
-                                    {profile.name}{profile.name.trim().toLowerCase() === activeProfile.trim().toLowerCase() ? ` (${t('profiles.activeTag')})` : ''}
-                                </option>
-                            ))}
-                        </select>
+                        />
                         {deleteRequiresReplacement ? (
                             <>
                                 <p className="modal-note">{t('modal.delete.activeDescription', {name: deleteTarget})}</p>
                                 {deleteReplacementOptions.length > 0 ? (
                                     <>
                                         <label className="field-label" htmlFor="delete-replacement-modal-select">{t('modal.delete.replacementLabel')}</label>
-                                        <select
+                                        <ThemedSelect
                                             id="delete-replacement-modal-select"
                                             value={deleteReplacementTarget}
-                                            onChange={(event) => setDeleteReplacementTarget(event.target.value)}
+                                            options={deleteReplacementSelectOptions}
+                                            onChange={setDeleteReplacementTarget}
                                             disabled={isLoading}
-                                        >
-                                            {deleteReplacementOptions.map((profile) => (
-                                                <option key={profile.name} value={profile.name}>
-                                                    {profile.name}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        />
                                     </>
                                 ) : (
                                     <p className="modal-note">{t('modal.delete.onlyProfileHint')}</p>
