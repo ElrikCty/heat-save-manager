@@ -6,8 +6,10 @@ This repository can generate Winget manifests from a published GitHub release.
 
 - A published release tag like `v1.0.3`
 - Release assets present:
-  - `HeatSaveManager-vX.Y.Z-windows-x64.exe`
-  - `HeatSaveManager-vX.Y.Z-windows-x64.exe.sha256`
+  - `HeatSaveManager-vX.Y.Z-windows-x64-installer.exe`
+  - `HeatSaveManager-vX.Y.Z-windows-x64-installer.exe.sha256`
+
+This flow now publishes the normal Windows installer to Winget, not the standalone portable executable.
 
 ## Generate manifests
 
