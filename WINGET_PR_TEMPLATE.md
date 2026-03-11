@@ -11,7 +11,8 @@ Use this when opening the PR to `microsoft/winget-pkgs`.
 ```markdown
 ## Summary
 - Add `ElrikCty.HeatSaveManager` version `<X.Y.Z>` manifests.
-- Installer source: `https://github.com/ElrikCty/heat-save-manager/releases/tag/v<X.Y.Z>`
+- Installer source: `https://github.com/ElrikCty/heat-save-manager/releases/download/v<X.Y.Z>/HeatSaveManager-v<X.Y.Z>-windows-x64-installer.exe`
+- Manifest targets the standard NSIS installer (not the portable executable).
 
 ## Files
 - `manifests/e/ElrikCty/HeatSaveManager/<X.Y.Z>/ElrikCty.HeatSaveManager.yaml`

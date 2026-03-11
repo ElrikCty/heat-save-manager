@@ -7,7 +7,6 @@ param(
     [string]$PackageName = 'Heat Save Manager',
     [string]$License = 'MIT',
     [string]$ShortDescription = 'Desktop app to manage Need for Speed Heat save profiles on Windows.',
-    [string]$CommandAlias = 'HeatSaveManager',
     [string]$Repo = 'ElrikCty/heat-save-manager'
 )
 
@@ -21,12 +20,12 @@ $version = $Tag.TrimStart('v')
 $releaseApi = "https://api.github.com/repos/$Repo/releases/tags/$Tag"
 $release = Invoke-RestMethod -Uri $releaseApi -Headers @{ 'User-Agent' = 'heat-save-manager-winget-manifest' }
 
-$exeName = "HeatSaveManager-$Tag-windows-x64.exe"
-$checksumName = "$exeName.sha256"
+$installerName = "HeatSaveManager-$Tag-windows-x64-installer.exe"
+$checksumName = "$installerName.sha256"
 
-$exeAsset = $release.assets | Where-Object { $_.name -eq $exeName } | Select-Object -First 1
-if (-not $exeAsset) {
-    throw "Release asset not found: $exeName. This helper expects releases that include executable assets (v1.0.3+ workflow)."
+$installerAsset = $release.assets | Where-Object { $_.name -eq $installerName } | Select-Object -First 1
+if (-not $installerAsset) {
+    throw "Release asset not found: $installerName. This helper expects releases that include installer assets."
 }
 
 $checksumAsset = $release.assets | Where-Object { $_.name -eq $checksumName } | Select-Object -First 1
@@ -38,11 +37,6 @@ $checksumLine = Invoke-RestMethod -Uri $checksumAsset.browser_download_url -Head
 $installerSha256 = ($checksumLine -split '\s+')[0].Trim().ToUpperInvariant()
 if ($installerSha256.Length -ne 64) {
     throw "Invalid SHA256 value from checksum file: $installerSha256"
-}
-
-$commandAliasTrimmed = $CommandAlias.Trim()
-if (-not $commandAliasTrimmed) {
-    throw "CommandAlias must not be empty"
 }
 
 $segments = $PackageIdentifier.Split('.')
@@ -71,14 +65,17 @@ $installerManifest = @"
 # Created with scripts/generate-winget-manifests.ps1
 PackageIdentifier: $PackageIdentifier
 PackageVersion: $version
-InstallerType: portable
-Commands:
-  - $commandAliasTrimmed
+InstallerType: nullsoft
+Scope: machine
 Installers:
   - Architecture: x64
-    InstallerUrl: $($exeAsset.browser_download_url)
+    InstallerUrl: $($installerAsset.browser_download_url)
     InstallerSha256: $installerSha256
     InstallerLocale: en-US
+    AppsAndFeaturesEntries:
+      - DisplayName: $PackageName
+        Publisher: $Publisher
+        DisplayVersion: $version
 ManifestType: installer
 ManifestVersion: 1.6.0
 "@
@@ -101,9 +98,10 @@ $versionPath = Join-Path $manifestDir "$baseFileName.yaml"
 $installerPath = Join-Path $manifestDir "$baseFileName.installer.yaml"
 $localePath = Join-Path $manifestDir "$baseFileName.locale.en-US.yaml"
 
-[System.IO.File]::WriteAllText($versionPath, $versionManifest, [System.Text.Encoding]::UTF8)
-[System.IO.File]::WriteAllText($installerPath, $installerManifest, [System.Text.Encoding]::UTF8)
-[System.IO.File]::WriteAllText($localePath, $localeManifest, [System.Text.Encoding]::UTF8)
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($versionPath, $versionManifest, $utf8NoBom)
+[System.IO.File]::WriteAllText($installerPath, $installerManifest, $utf8NoBom)
+[System.IO.File]::WriteAllText($localePath, $localeManifest, $utf8NoBom)
 
 Write-Host "Winget manifests generated:"
 Write-Host "- $versionPath"
