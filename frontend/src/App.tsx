@@ -391,6 +391,8 @@ function App() {
     const canExportBundle = exportProfileName.trim() !== '';
     const resolvedImportTarget = importTargetProfile === NEW_PROFILE_OPTION ? importTargetNewName.trim() : importTargetProfile.trim();
     const canImportBundle = resolvedImportTarget !== '' && importBundlePath.trim() !== '';
+    const hasSelectedProfile = selectedProfileName.trim() !== '';
+    const selectedIsActive = hasSelectedProfile && activeProfile.trim() !== '' && selectedProfileName.trim().toLowerCase() === activeProfile.trim().toLowerCase();
     const saveGamePathHealthItem = healthReport?.items.find((item) => item.name === 'savegame_path') ?? null;
     const needsSaveGamePathFix = saveGamePathHealthItem ? !saveGamePathHealthItem.ok : false;
     const markerHealthItem = healthReport?.items.find((item) => item.name === 'marker_file') ?? null;
@@ -1003,8 +1005,6 @@ function App() {
     }
 
     async function onSwitch(profileName: string) {
-        const previousActive = activeProfile.trim();
-
         try {
             setStatus(t('status.switchingProfile', {name: profileName}));
             setIsLoading(true);
@@ -1017,7 +1017,6 @@ function App() {
             const feedback = toErrorFeedback(error, t('error.switch'), t);
             setStatus(feedback.message);
             setRecoveryHint(feedback.hint);
-            setSelectedProfileName(previousActive);
         } finally {
             setIsLoading(false);
         }
@@ -1025,7 +1024,15 @@ function App() {
 
     function closeSwitchConfirmModal() {
         setSwitchConfirmProfile(null);
-        setSelectedProfileName(activeProfile.trim());
+    }
+
+    function openSwitchConfirmModal(profileName: string) {
+        const nextProfile = profileName.trim();
+        if (!nextProfile || nextProfile.toLowerCase() === activeProfile.trim().toLowerCase()) {
+            return;
+        }
+
+        setSwitchConfirmProfile(nextProfile);
     }
 
     async function confirmSwitchProfileFromModal() {
@@ -1790,7 +1797,7 @@ function App() {
                             <div className="profile-toolbar">
                                 <div className="profile-select-wrap">
                                     <select
-                                        className={selectedProfileName && activeProfile && selectedProfileName === activeProfile ? 'has-active-tag' : ''}
+                                        className={selectedIsActive ? 'has-active-tag' : ''}
                                         value={selectedProfileName}
                                         onChange={(event) => {
                                             const next = event.target.value;
@@ -1799,10 +1806,6 @@ function App() {
                                             }
 
                                             setSelectedProfileName(next);
-
-                                            if (next !== activeProfile) {
-                                                setSwitchConfirmProfile(next);
-                                            }
                                         }}
                                         disabled={isLoading || isModalOpen}
                                         aria-label={t('profiles.selectAria')}
@@ -1816,16 +1819,25 @@ function App() {
                                             </option>
                                         ))}
                                     </select>
-                                    {selectedProfileName && activeProfile && selectedProfileName === activeProfile && (
+                                    {selectedIsActive && (
                                         <span className="profile-active-tag" style={{left: `calc(0.92rem + ${Math.min(selectedProfileName.length + 2, 16)}ch)`}}>
                                             {t('profiles.activeTag')}
                                         </span>
                                     )}
                                 </div>
                                 <button
+                                    className="switch-btn"
+                                    onClick={() => openSwitchConfirmModal(selectedProfileName)}
+                                    disabled={isLoading || isModalOpen || !hasSelectedProfile || selectedIsActive}
+                                    aria-label={t('profiles.switchSelectedAria')}
+                                >
+                                    <RefreshCw size={13} strokeWidth={2.1} />
+                                    {t('common.switch')}
+                                </button>
+                                <button
                                     className="switch-btn secondary"
                                     onClick={() => openRenameModal(selectedProfileName)}
-                                    disabled={isLoading || isModalOpen || !selectedProfileName}
+                                    disabled={isLoading || isModalOpen || !hasSelectedProfile}
                                     aria-label={t('profiles.renameSelectedAria')}
                                 >
                                     <Edit3 size={13} strokeWidth={2.1} />
@@ -1834,7 +1846,7 @@ function App() {
                                 <button
                                     className="switch-btn danger"
                                     onClick={() => openDeleteModal(selectedProfileName)}
-                                    disabled={isLoading || isModalOpen || !selectedProfileName || selectedProfileName === activeProfile}
+                                    disabled={isLoading || isModalOpen || !hasSelectedProfile || selectedIsActive}
                                     aria-label={t('profiles.deleteSelectedAria')}
                                 >
                                     <Trash2 size={13} strokeWidth={2.1} />

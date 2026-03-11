@@ -630,6 +630,7 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
 .profile-toolbar {
     display: flex;
     gap: 0.54rem;
+    flex-wrap: wrap;
     align-items: center;
     margin-top: 0.42rem;
 }
