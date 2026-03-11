@@ -1381,25 +1381,34 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     font-size: 0.8rem;
 }
 
+.import-modal-section {
+    display: grid;
+    gap: 0.72rem;
+}
+
+.import-modal-bundle-section {
+    margin-top: 1rem;
+}
+
 .fresh-name-modal-card .field-label {
     margin: 0 0 0.36rem;
     font-size: 0.8rem;
 }
 
-.import-modal-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+.import-modal-destination {
+    display: grid;
+    gap: 0.72rem;
 }
 
-.import-modal-row .switch-btn.secondary {
-    width: auto;
-    min-width: 108px;
-    padding: 0.55rem 0.78rem;
+.import-modal-new-profile-row {
+    margin-top: 0.14rem;
 }
 
 .import-modal-card select,
 .import-modal-card input {
     min-height: 2.3rem;
     border-radius: 10px;
+    width: 100%;
 }
 
 .fresh-name-modal-card input {
@@ -1407,15 +1416,46 @@ select:disabled { opacity: 0.56; cursor: not-allowed; }
     border-radius: 10px;
 }
 
-.import-modal-selected {
-    margin: 0.58rem 0 0.74rem;
+.import-bundle-label {
+    margin: 0;
+}
+
+.import-bundle-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 0.62rem;
+}
+
+.import-bundle-row .switch-btn.secondary {
+    width: auto;
+    min-width: 108px;
+    padding: 0.55rem 0.78rem;
+}
+
+.import-bundle-display {
+    min-height: 2.3rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 10px;
+    border: 1px solid rgba(129, 153, 190, 0.26);
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(230, 238, 251, 0.86);
     font-size: 0.74rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.import-bundle-display.is-placeholder {
+    color: rgba(188, 202, 223, 0.5);
 }
 
 .import-modal-card .modal-actions .import-action {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
+}
+
+.import-modal-card .modal-actions {
+    margin-top: 1.08rem;
 }
 
 .import-modal-card .modal-actions .import-action svg {

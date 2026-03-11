@@ -637,6 +637,10 @@ function App() {
                     return NEW_PROFILE_OPTION;
                 }
 
+                if (resolvedActive && profileItems.some((profile) => profile.name === resolvedActive)) {
+                    return resolvedActive;
+                }
+
                 if (current && profileItems.some((profile) => profile.name === current)) {
                     return current;
                 }
@@ -1309,6 +1313,14 @@ function App() {
     }
 
     function openImportModal() {
+        setImportTargetProfile(() => {
+            if (activeProfile.trim() && profiles.some((profile) => profile.name === activeProfile)) {
+                return activeProfile;
+            }
+
+            return profiles[0]?.name ?? NEW_PROFILE_OPTION;
+        });
+        setImportTargetNewName('');
         setIsImportModalOpen(true);
     }
 
@@ -2309,43 +2321,52 @@ function App() {
                     <div className="modal-card import-modal-card" onClick={(event) => event.stopPropagation()}>
                         <h3 id="import-modal-title">{t('modal.import.title')}</h3>
                         <p id="import-modal-description">{t('modal.import.description')}</p>
-                        <label className="field-label" htmlFor="import-profile-modal-input">{t('modal.import.label')}</label>
-                        <div className="field-row import-modal-row">
-                            <select
-                                id="import-profile-modal-input"
-                                value={importTargetProfile}
-                                onChange={(event) => {
-                                    const next = event.target.value;
-                                    setImportTargetProfile(next);
-                                    if (next !== NEW_PROFILE_OPTION) {
-                                        setImportTargetNewName('');
-                                    }
-                                }}
-                                disabled={isLoading}
-                            >
-                                {profiles.map((profile) => (
-                                    <option key={profile.name} value={profile.name}>
-                                        {profile.name}
-                                    </option>
-                                ))}
-                                <option value={NEW_PROFILE_OPTION}>{t('saveActions.createNewProfileOption')}</option>
-                            </select>
-                            <button className="switch-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading}>
-                                {t('common.browse')}
-                            </button>
-                        </div>
-                        {importTargetProfile === NEW_PROFILE_OPTION && (
-                            <div className="field-row">
-                                <input
-                                    ref={importNewProfileRef}
-                                    value={importTargetNewName}
-                                    onChange={(event) => setImportTargetNewName(event.target.value)}
-                                    placeholder={t('saveActions.newProfilePlaceholder')}
+                        <div className="import-modal-section">
+                            <label className="field-label" htmlFor="import-profile-modal-input">{t('modal.import.label')}</label>
+                            <div className="import-modal-destination">
+                                <select
+                                    id="import-profile-modal-input"
+                                    value={importTargetProfile}
+                                    onChange={(event) => {
+                                        const next = event.target.value;
+                                        setImportTargetProfile(next);
+                                        if (next !== NEW_PROFILE_OPTION) {
+                                            setImportTargetNewName('');
+                                        }
+                                    }}
                                     disabled={isLoading}
-                                />
+                                >
+                                    {profiles.map((profile) => (
+                                        <option key={profile.name} value={profile.name}>
+                                            {profile.name}
+                                        </option>
+                                    ))}
+                                    <option value={NEW_PROFILE_OPTION}>{t('saveActions.createNewProfileOption')}</option>
+                                </select>
                             </div>
-                        )}
-                        <p className="field-hint import-modal-selected">{t('modal.import.selectedBundle', {path: importBundlePath || t('common.noneSelectedBundle')})}</p>
+                            {importTargetProfile === NEW_PROFILE_OPTION && (
+                                <div className="import-modal-destination import-modal-new-profile-row">
+                                    <input
+                                        ref={importNewProfileRef}
+                                        value={importTargetNewName}
+                                        onChange={(event) => setImportTargetNewName(event.target.value)}
+                                        placeholder={t('saveActions.newProfilePlaceholder')}
+                                        disabled={isLoading}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                        <div className="import-modal-section import-modal-bundle-section">
+                            <p className="field-label import-bundle-label">{t('modal.import.bundleLabel')}</p>
+                            <div className="field-row import-bundle-row">
+                                <div className={`import-bundle-display${importBundlePath.trim() ? '' : ' is-placeholder'}`} title={importBundlePath || t('common.noneSelectedBundle')}>
+                                    {importBundlePath || t('common.noneSelectedBundle')}
+                                </div>
+                                <button className="switch-btn secondary" onClick={() => void onPickImportBundlePath()} disabled={isLoading}>
+                                    {t('common.browse')}
+                                </button>
+                            </div>
+                        </div>
                         <div className="modal-actions">
                             <button className="switch-btn secondary" onClick={closeImportModal} disabled={isLoading}>
                                 {t('common.cancel')}

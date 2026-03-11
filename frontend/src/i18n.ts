@@ -296,6 +296,7 @@ const translations: Record<Locale, Record<string, string>> = {
         'modal.import.title': 'Import Profile Bundle',
         'modal.import.description': 'Choose destination profile and bundle file to import.',
         'modal.import.label': 'Import .zip into profile',
+        'modal.import.bundleLabel': 'Bundle .zip file',
         'modal.import.selectedBundle': 'Selected bundle: {path}',
         'modal.import.button': 'Import Bundle',
 
@@ -596,6 +597,7 @@ const translations: Record<Locale, Record<string, string>> = {
         'modal.import.title': 'Importar bundle de perfil',
         'modal.import.description': 'Elige perfil de destino y archivo bundle para importar.',
         'modal.import.label': 'Importar .zip en perfil',
+        'modal.import.bundleLabel': 'Archivo bundle .zip',
         'modal.import.selectedBundle': 'Bundle seleccionado: {path}',
         'modal.import.button': 'Importar bundle',
 
